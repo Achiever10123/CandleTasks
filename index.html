@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CandleTasks</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body id="app-body">
+
+  <!-- ── Title bar ─────────────────────────────────────────────── -->
+  <div class="titlebar" id="titlebar">
+    <div class="titlebar-left">
+      <button class="flame-btn" id="flame-btn" title="View streak">
+        <div class="flame-icon" id="flame-icon">
+          <svg class="flame-svg" id="flame-svg" viewBox="0 0 48 60" xmlns="http://www.w3.org/2000/svg" width="22" height="27">
+            <defs>
+              <linearGradient id="outerGrad" x1="50%" y1="0%" x2="50%" y2="100%">
+                <stop offset="0%"   id="og-top"    stop-color="#FF9500"/>
+                <stop offset="100%" id="og-bottom"  stop-color="#FF7700"/>
+              </linearGradient>
+              <linearGradient id="innerGrad" x1="50%" y1="0%" x2="50%" y2="100%">
+                <stop offset="0%"   id="ig-top"    stop-color="#FFD000"/>
+                <stop offset="100%" id="ig-bottom"  stop-color="#FFB800"/>
+              </linearGradient>
+            </defs>
+            <!-- Outer flame: pure teardrop -->
+            <path id="f-outer" class="f-outer"
+              d="M24 3
+                 C24 3 10 18 10 32
+                 C10 44 16 57 24 57
+                 C32 57 38 44 38 32
+                 C38 18 24 3 24 3Z"
+              fill="url(#outerGrad)"/>
+            <!-- Inner core: smaller teardrop -->
+            <path id="f-inner" class="f-inner"
+              d="M24 20
+                 C24 20 16 30 16 38
+                 C16 46 19.5 52 24 52
+                 C28.5 52 32 46 32 38
+                 C32 30 24 20 24 20Z"
+              fill="url(#innerGrad)"/>
+            <!-- Hot center spark: bright oval -->
+            <ellipse id="f-spark" class="f-spark"
+              cx="24" cy="44" rx="4.5" ry="5.5"
+              fill="#FFF3B8"/>
+            <!-- Embers -->
+            <circle class="ember" cx="17" cy="14" r="1.8" fill="#FFF3B8" opacity="0"/>
+            <circle class="ember" cx="31" cy="11" r="1.4" fill="#FFF3B8" opacity="0"/>
+            <circle class="ember" cx="24" cy="7"  r="1.2" fill="#FFD000" opacity="0"/>
+          </svg>
+        </div>
+      </button>
+      <span class="streak-label" id="streak-label">0 day streak</span>
+    </div>
+    <div class="titlebar-right">
+      <button class="tb-btn" id="sound-btn" title="Sound on/off" aria-pressed="true">
+        <svg class="snd-on" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>
+        <svg class="snd-off" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+      </button>
+      <button class="tb-btn" id="help-btn" title="Help &amp; shortcuts (F1)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </button>
+      <button class="tb-btn settings-btn-visible" id="settings-btn" title="Settings">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+      <button class="tb-btn" id="mini-btn" title="Mini mode (Ctrl+M)" aria-pressed="false">
+        <svg class="chev-up" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"/></svg>
+        <svg class="chev-down" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <button class="tb-btn" id="min-btn" title="Minimize">&#8722;</button>
+      <button class="tb-btn close-btn" id="close-btn" title="Close">&#10005;</button>
+    </div>
+  </div>
+
+  <!-- ── Main view ─────────────────────────────────────────────── -->
+  <div class="main-view" id="main-view">
+    <div class="list-tabs-row">
+      <div class="list-tabs" id="list-tabs"></div>
+      <button class="list-add" id="list-add" title="New list">+</button>
+    </div>
+
+    <div class="view-bar" id="view-bar">
+      <button type="button" class="view-chip" data-view="today">Today <span class="vc-n" id="vc-today">0</span></button>
+      <button type="button" class="view-chip" data-view="overdue">Overdue <span class="vc-n" id="vc-overdue">0</span></button>
+      <button type="button" class="view-chip" data-view="week">Next 7 days <span class="vc-n" id="vc-week">0</span></button>
+    </div>
+
+    <div class="add-task-row">
+      <div class="input-wrap">
+        <input type="text" id="task-input" placeholder="New task... try &quot;call Sam fri 3pm&quot;" maxlength="120" autocomplete="off" />
+        <span class="char-count" id="char-count">0/120</span>
+      </div>
+      <button id="add-btn" title="Add task">+</button>
+    </div>
+    <div class="parse-hint hidden" id="parse-hint"></div>
+
+    <div class="due-row">
+      <label for="due-input">Due</label>
+      <input type="date" id="due-input" />
+      <input type="time" id="due-time-input" title="Due time (optional)" disabled />
+      <select id="recur-input" title="Repeat">
+        <option value="">No repeat</option>
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="days">Custom days</option>
+        <option value="every">Every N...</option>
+        <option value="after">N after done...</option>
+        <option value="monthday">Monthly on day...</option>
+      </select>
+      <select id="prio-input" title="Priority">
+        <option value="">No priority</option>
+        <option value="1">Low</option>
+        <option value="2">Medium</option>
+        <option value="3">High</option>
+      </select>
+    </div>
+    <div class="days-row hidden" id="days-row"></div>
+    <div class="recur-extra hidden" id="recur-extra"></div>
+
+    <div class="search-row">
+      <div class="search-wrap">
+        <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+        <input type="text" id="search-input" placeholder="Search tasks..." autocomplete="off" />
+        <button class="search-clear hidden" id="search-clear" title="Clear search">&#10005;</button>
+      </div>
+      <select id="sort-select" title="Sort tasks">
+        <option value="manual">Manual</option>
+        <option value="priority">Priority</option>
+        <option value="due">Due date</option>
+      </select>
+    </div>
+    <div class="tag-filter hidden" id="tag-filter"></div>
+
+    <div class="task-list-wrap">
+      <ul id="task-list"></ul>
+      <p class="empty-hint" id="empty-hint">No tasks yet. Add one above.</p>
+    </div>
+
+    <div class="footer-bar">
+      <div class="footer-left">
+        <span id="footer-count"></span>
+        <span class="overdue-pill hidden" id="overdue-pill"></span>
+      </div>
+      <div class="footer-actions">
+        <button class="clear-btn hidden" id="archive-btn">Archive (0)</button>
+        <button class="clear-btn danger hidden" id="delete-all-btn">Delete all</button>
+        <button class="clear-btn" id="clear-done-btn">Clear done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Settings panel ────────────────────────────────────────── -->
+  <div class="settings-panel hidden" id="settings-panel">
+    <h2 class="settings-title">&#9881; Settings</h2>
+
+    <div class="setting-row">
+      <span>Always on top</span>
+      <label class="toggle"><input type="checkbox" id="set-ontop"/><span class="slider"></span></label>
+    </div>
+    <div class="setting-row">
+      <span>Snap position</span>
+      <select id="set-snap">
+        <option value="none">None</option>
+        <option value="top">Top of screen</option>
+        <option value="bottom">Bottom of screen</option>
+        <option value="left">Left of screen</option>
+        <option value="right">Right of screen</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <span>Dark mode</span>
+      <label class="toggle"><input type="checkbox" id="set-dark"/><span class="slider"></span></label>
+    </div>
+    <div class="setting-row">
+      <span>Theme color</span>
+      <select id="set-theme-color">
+        <option value="default">Default (Amber)</option>
+        <option value="green">Green</option>
+        <option value="blue">Blue</option>
+        <option value="red">Red</option>
+        <option value="custom">Custom color...</option>
+      </select>
+    </div>
+    <div class="setting-row" id="custom-color-row">
+      <span>Accent color</span>
+      <div class="color-wrap">
+        <input type="color" id="set-custom-color" value="#c97b2a" />
+        <span class="range-val" id="custom-color-hex">#c97b2a</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <span>UI style</span>
+      <select id="set-ui-style">
+        <option value="default">Default</option>
+        <option value="glass">Glassmorphism</option>
+        <option value="brutalism">Neo-Brutalism</option>
+        <option value="bento">Bento</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <span>Window opacity</span>
+      <div class="range-wrap">
+        <input type="range" id="set-opacity" min="40" max="100" step="5" value="100" />
+        <span class="range-val" id="opacity-val">100%</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <span>Launch at login</span>
+      <label class="toggle"><input type="checkbox" id="set-launch-login"/><span class="slider"></span></label>
+    </div>
+    <div class="setting-row">
+      <span>Weekly review (Sundays)</span>
+      <label class="toggle"><input type="checkbox" id="set-weekly-review"/><span class="slider"></span></label>
+    </div>
+    <div class="setting-row" id="review-time-row">
+      <span>Review time</span>
+      <input type="time" id="set-review-time" value="18:00" />
+    </div>
+    <div class="setting-row">
+      <span>Compact mode</span>
+      <label class="toggle"><input type="checkbox" id="set-compact"/><span class="slider"></span></label>
+    </div>
+    <div class="setting-row">
+      <span>Quick add shortcut (Ctrl+Alt+N)</span>
+      <label class="toggle"><input type="checkbox" id="set-global-quick"/><span class="slider"></span></label>
+    </div>
+    <div class="setting-row">
+      <span>Minimize to tray</span>
+      <label class="toggle"><input type="checkbox" id="set-minimize-tray"/><span class="slider"></span></label>
+    </div>
+    <div class="setting-row">
+      <span>Daily reminder</span>
+      <label class="toggle"><input type="checkbox" id="set-reminder"/><span class="slider"></span></label>
+    </div>
+    <div class="setting-row">
+      <span>Overdue alerts</span>
+      <label class="toggle"><input type="checkbox" id="set-notify-overdue"/><span class="slider"></span></label>
+    </div>
+    <div class="setting-row" id="reminder-time-row">
+      <span>Reminder time</span>
+      <input type="time" id="set-reminder-time" value="09:00" />
+    </div>
+    <div class="setting-row tasks-path-row">
+      <span>Tasks file</span>
+      <span class="tasks-path" id="tasks-path-label">...</span>
+    </div>
+    <div class="setting-row tasks-path-row" id="backup-row">
+      <span>Backup &amp; restore</span>
+      <span class="tasks-path">One file with all your tasks, lists, streak and preferences.</span>
+      <div class="sync-actions">
+        <button class="download-btn" id="backup-btn">Back up now</button>
+        <button class="download-btn" id="restore-btn">Restore from file...</button>
+      </div>
+    </div>
+    <div class="setting-row tasks-path-row" id="sync-row">
+      <span>Sync folder (Dropbox, OneDrive...)</span>
+      <span class="tasks-path" id="sync-path-label">Not set (stored on this device)</span>
+      <div class="sync-actions">
+        <button class="download-btn" id="sync-choose">Choose folder</button>
+        <button class="clear-btn" id="sync-clear">Stop syncing</button>
+      </div>
+    </div>
+
+    <button class="save-settings-btn" id="save-settings-btn">Save settings</button>
+    <button class="back-btn" id="back-btn">Back</button>
+  </div>
+
+  <!-- ── Streak Modal ───────────────────────────────────────────── -->
+  <div class="modal-overlay hidden" id="streak-modal">
+    <div class="modal-card" id="modal-card">
+      <button class="modal-close" id="modal-close">&#10005;</button>
+
+      <!-- Big flame -->
+      <div class="modal-flame-wrap" id="modal-flame-wrap">
+        <svg class="flame-svg" id="modal-flame-svg" viewBox="0 0 48 60" xmlns="http://www.w3.org/2000/svg" width="90" height="112">
+          <defs>
+            <linearGradient id="mOuterGrad" x1="50%" y1="0%" x2="50%" y2="100%">
+              <stop offset="0%"   id="mog-top"    stop-color="#FF9500"/>
+              <stop offset="100%" id="mog-bottom"  stop-color="#FF7700"/>
+            </linearGradient>
+            <linearGradient id="mInnerGrad" x1="50%" y1="0%" x2="50%" y2="100%">
+              <stop offset="0%"   id="mig-top"    stop-color="#FFD000"/>
+              <stop offset="100%" id="mig-bottom"  stop-color="#FFB800"/>
+            </linearGradient>
+          </defs>
+          <!-- Outer flame: pure teardrop -->
+          <path id="mf-outer" class="f-outer"
+            d="M24 3
+               C24 3 10 18 10 32
+               C10 44 16 57 24 57
+               C32 57 38 44 38 32
+               C38 18 24 3 24 3Z"
+            fill="url(#mOuterGrad)"/>
+          <!-- Inner core: smaller teardrop -->
+          <path id="mf-inner" class="f-inner"
+            d="M24 20
+               C24 20 16 30 16 38
+               C16 46 19.5 52 24 52
+               C28.5 52 32 46 32 38
+               C32 30 24 20 24 20Z"
+            fill="url(#mInnerGrad)"/>
+          <!-- Hot spark -->
+          <ellipse id="mf-spark" class="f-spark"
+            cx="24" cy="44" rx="4.5" ry="5.5"
+            fill="#FFF3B8"/>
+          <!-- Embers -->
+          <circle class="ember" cx="17" cy="14" r="2.0" fill="#FFF3B8" opacity="0"/>
+          <circle class="ember" cx="31" cy="11" r="1.6" fill="#FFF3B8" opacity="0"/>
+          <circle class="ember" cx="24" cy="7"  r="1.4" fill="#FFD000" opacity="0"/>
+        </svg>
+      </div>
+
+      <!-- Streak count -->
+      <div class="modal-count" id="modal-count">0</div>
+      <div class="modal-label">day streak!</div>
+
+      <!-- History: week / month -->
+      <div class="modal-tabs" id="modal-tabs">
+        <button class="active" data-view="week">Week</button>
+        <button data-view="month">Month</button>
+        <button data-view="stats">Stats</button>
+      </div>
+      <div class="cal-nav" id="cal-nav">
+        <button id="cal-prev" title="Earlier">&#8249;</button>
+        <span id="cal-title"></span>
+        <button id="cal-next" title="Later">&#8250;</button>
+      </div>
+      <div class="cal-grid" id="modal-week"></div>
+      <div class="cal-caption" id="cal-caption"></div>
+      <div class="stats-view hidden" id="stats-view"></div>
+
+      <!-- Message -->
+      <div class="modal-freeze" id="modal-freeze"></div>
+      <p class="modal-msg" id="modal-msg">Complete a task today to start your streak.</p>
+    </div>
+  </div>
+
+  <!-- ── Help Modal ─────────────────────────────────────────────── -->
+  <div class="modal-overlay hidden" id="help-modal">
+    <div class="modal-card help-card" id="help-card">
+      <button class="modal-close" id="help-close">&#10005;</button>
+      <h2 class="help-title">Help &amp; shortcuts</h2>
+
+      <h3 class="help-h">Keyboard shortcuts</h3>
+      <dl class="help-keys">
+        <div><dt><kbd>Ctrl</kbd><kbd>N</kbd></dt><dd>New task (focus the input)</dd></div>
+        <div><dt><kbd>Ctrl</kbd><kbd>F</kbd></dt><dd>Search tasks</dd></div>
+        <div><dt><kbd>Ctrl</kbd><kbd>Z</kbd></dt><dd>Undo last action</dd></div>
+        <div><dt><kbd>Enter</kbd></dt><dd>Add task / save an edit</dd></div>
+        <div><dt><kbd>Esc</kbd></dt><dd>Cancel edit, clear search, close windows</dd></div>
+        <div><dt><kbd>F1</kbd></dt><dd>Open this help</dd></div>
+        <div><dt><kbd>Ctrl</kbd><kbd>M</kbd></dt><dd>Mini mode on / off</dd></div>
+        <div><dt><kbd>&uarr;</kbd><kbd>&darr;</kbd></dt><dd>Select a task</dd></div>
+        <div><dt><kbd>Space</kbd></dt><dd>Complete the selected task</dd></div>
+        <div><dt><kbd>Del</kbd></dt><dd>Archive the selected task</dd></div>
+        <div><dt><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>N</kbd></dt><dd>Quick add from any app</dd></div>
+      </dl>
+
+      <h3 class="help-h">Using the app</h3>
+      <ul class="help-list">
+        <li><b>Add a task:</b> type it and press Enter. Plain words work: <code>call Sam fri 3pm</code>, <code>pay rent monthly on the 1st</code>, <code>gym every mon wed fri</code>, <code>water plants 3 days after done</code>, <code>!high</code> for priority. A preview shows what was understood.</li>
+        <li><b>Tags:</b> write <code>#work</code> in the input to tag a task. Click any tag to filter by it.</li>
+        <li><b>Edit:</b> click a task's text to rename it.</li>
+        <li><b>Reorder:</b> drag a task up or down. Pinned tasks stay on top.</li>
+        <li><b>Pin:</b> the pin icon keeps a task at the top of its list.</li>
+        <li><b>Details:</b> the chevron opens notes, steps, tags, repeat, due date and move-to-list.</li>
+        <li><b>Due time:</b> add a time to get an alert at that moment. Overdue tasks show Tomorrow and Next week buttons to snooze them.</li>
+        <li><b>Views:</b> Today, Overdue and Next 7 days gather tasks from every list. Click a list tab to go back.</li>
+        <li><b>Priority &amp; sort:</b> set Low / Medium / High (the checkbox ring changes color), then sort by priority or due date next to the search box.</li>
+        <li><b>Tag colors:</b> right-click any tag to pick its color.</li>
+        <li><b>Mini mode:</b> the chevron beside Minimize shrinks the window to a quick input and today's tasks.</li>
+        <li><b>Move:</b> drag a task onto another list's tab to move it.</li>
+        <li><b>Repeat:</b> daily, weekly, or on days you pick (like Mon/Wed/Fri). A done task comes back by itself.</li>
+        <li><b>Lists:</b> use the tabs for separate boards. Double-click a tab to rename it.</li>
+        <li><b>Archive:</b> the box icon archives a task. Open "Archive" in the footer to restore tasks, delete them for good, or use Delete all.</li>
+        <li><b>Undo:</b> after archiving or deleting, tap Undo in the message or press Ctrl+Z.</li>
+      </ul>
+
+      <h3 class="help-h">Streak</h3>
+      <ul class="help-list">
+        <li>Complete at least one task a day to grow your streak. You have a 2-day grace period.</li>
+        <li>Click the flame to see your week, month and stats.</li>
+        <li>Every 7 days you earn a streak freeze (up to 3). A freeze covers an extra missed day so your streak survives.</li>
+        <li>The flame changes color as the streak grows, with a confetti burst at 3, 7, 14, 30, 60, 100 and 365 days.</li>
+      </ul>
+
+      <h3 class="help-h">Other</h3>
+      <ul class="help-list">
+        <li><b>Sync:</b> in Settings, choose a folder inside Dropbox or OneDrive to share your tasks and streak between computers.</li>
+        <li><b>Tray:</b> with "Minimize to tray" on, right-click the tray icon for Quick add. Overdue tasks show as a number badge.</li>
+        <li><b>Weekly review:</b> on Sundays you get a summary notification. Click it to open your stats.</li>
+        <li><b>Launch at login:</b> Settings; works in the installed app.</li>
+        <li><b>Sound:</b> the speaker icon in the header mutes or unmutes sounds.</li>
+        <li><b>Compact mode:</b> smaller rows for a small pinned window (Settings).</li>
+        <li><b>Colors:</b> pick a theme color or choose your own in Settings.</li>
+        <li><b>Opacity:</b> make the window see-through in Settings.</li>
+        <li><b>Backup:</b> Settings has one-click backup and restore of all your data.</li>
+        <li><b>Overdue:</b> you get a desktop alert when a task becomes overdue, and a red count in the footer.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="tag-pop hidden" id="tag-pop"></div>
+
+  <!-- Toast (undo + milestones) -->
+  <div class="toast hidden" id="toast" role="status">
+    <span id="toast-msg"></span>
+    <button id="toast-action" class="hidden"></button>
+  </div>
+
+  <canvas id="confetti-canvas"></canvas>
+
+  <script src="nlp.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

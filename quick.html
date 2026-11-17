@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quick add</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body id="app-body" class="quick-body">
+  <div class="quick-wrap">
+    <div class="quick-head">
+      <span class="quick-title">Quick add</span>
+      <select id="quick-list" title="List"></select>
+    </div>
+    <div class="add-task-row">
+      <div class="input-wrap">
+        <input type="text" id="quick-input" placeholder="New task... (add #tags)" maxlength="120" autocomplete="off" />
+        <span class="char-count" id="quick-count">0/120</span>
+      </div>
+      <button id="add-btn" title="Add (Enter)">+</button>
+    </div>
+    <div class="quick-hint">Enter to add &middot; Esc to close</div>
+  </div>
+  <script src="quick.js"></script>
+</body>
+</html>
