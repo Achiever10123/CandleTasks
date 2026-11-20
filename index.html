@@ -25,30 +25,25 @@
                 <stop offset="100%" id="ig-bottom"  stop-color="#FFB800"/>
               </linearGradient>
             </defs>
-            <!-- Outer flame: pure teardrop -->
-            <path id="f-outer" class="f-outer"
-              d="M24 3
-                 C24 3 10 18 10 32
-                 C10 44 16 57 24 57
-                 C32 57 38 44 38 32
-                 C38 18 24 3 24 3Z"
-              fill="url(#outerGrad)"/>
-            <!-- Inner core: smaller teardrop -->
-            <path id="f-inner" class="f-inner"
-              d="M24 20
-                 C24 20 16 30 16 38
-                 C16 46 19.5 52 24 52
-                 C28.5 52 32 46 32 38
-                 C32 30 24 20 24 20Z"
-              fill="url(#innerGrad)"/>
-            <!-- Hot center spark: bright oval -->
-            <ellipse id="f-spark" class="f-spark"
-              cx="24" cy="44" rx="4.5" ry="5.5"
-              fill="#FFF3B8"/>
-            <!-- Embers -->
-            <circle class="ember" cx="17" cy="14" r="1.8" fill="#FFF3B8" opacity="0"/>
-            <circle class="ember" cx="31" cy="11" r="1.4" fill="#FFF3B8" opacity="0"/>
-            <circle class="ember" cx="24" cy="7"  r="1.2" fill="#FFD000" opacity="0"/>
+            <!-- Side tongues: small licks of flame that flare up and die back on their own rhythm -->
+            <path class="f-tongue t1" d="M14 24 C14 24 8 31 8.5 38 C9 44 13 47 17 46 C20 44 19 36 14 24Z" fill="url(#outerGrad)"/>
+            <path class="f-tongue t2" d="M35 22 C35 22 41 30 40 37 C39.5 43 35 46 31 45 C28 43 29 34 35 22Z" fill="url(#outerGrad)"/>
+            <!-- Outer flame: the outline morphs between shapes so the tip bends, stretches and snaps back -->
+            <path id="f-outer" class="f-outer" d="M24 3 C24 3 10 18 10 32 C10 44 16 57 24 57 C32 57 38 44 38 32 C38 18 24 3 24 3Z" fill="url(#outerGrad)">
+              <animate attributeName="d" dur="3.4s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.14;0.33;0.5;0.68;0.85;1" keySplines="0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1" values="M24 3 C24 3 10 18 10 32 C10 44 16 57 24 57 C32 57 38 44 38 32 C38 18 24 3 24 3Z;M27 0 C25 7 11 19 10 33 C10 45 16 57 24 57 C32 57 38 45 38 31 C38 17 29 8 27 0Z;M24 0 C23 8 12 21 11 33 C11 45 17 57 24 57 C31 57 37 45 37 33 C36 20 25 8 24 0Z;M20 5 C20 5 9 20 9 33 C9 45 15 57 24 57 C33 57 39 45 39 32 C39 19 21 9 20 5Z;M22 2 C26 8 11 19 10 32 C10 44 16 57 24 57 C32 57 38 44 38 33 C38 20 19 9 22 2Z;M27 0 C25 7 11 19 10 33 C10 45 16 57 24 57 C32 57 38 45 38 31 C38 17 29 8 27 0Z;M24 3 C24 3 10 18 10 32 C10 44 16 57 24 57 C32 57 38 44 38 32 C38 18 24 3 24 3Z"/>
+            </path>
+            <!-- Inner core: a faster, smaller shape of its own -->
+            <path id="f-inner" class="f-inner" d="M24 20 C24 20 16 30 16 38 C16 46 19.5 52 24 52 C28.5 52 32 46 32 38 C32 30 24 20 24 20Z" fill="url(#innerGrad)">
+              <animate attributeName="d" dur="2.3s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.2;0.42;0.63;0.82;1" keySplines="0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1" values="M24 20 C24 20 16 30 16 38 C16 46 19.5 52 24 52 C28.5 52 32 46 32 38 C32 30 24 20 24 20Z;M25 17 C24 24 17 31 16 39 C16 47 19.5 52 24 52 C28.5 52 32 47 32 38 C32 30 26 22 25 17Z;M23 22 C23 22 15 31 16 38 C16 46 19.5 52 24 52 C28.5 52 33 46 33 39 C33 31 23 22 23 22Z;M24 18 C23 25 16 31 17 39 C17 47 20 52 24 52 C28 52 31 47 31 39 C32 31 25 24 24 18Z;M25 17 C24 24 17 31 16 39 C16 47 19.5 52 24 52 C28.5 52 32 47 32 38 C32 30 26 22 25 17Z;M24 20 C24 20 16 30 16 38 C16 46 19.5 52 24 52 C28.5 52 32 46 32 38 C32 30 24 20 24 20Z"/>
+            </path>
+            <!-- Hot centre -->
+            <ellipse id="f-spark" class="f-spark" cx="24" cy="44" rx="4.5" ry="5.5" fill="#FFF3B8"/>
+            <!-- Embers drift up and sideways -->
+            <circle class="ember" cx="17" cy="14" r="2.0" fill="#FFF3B8" opacity="0" style="--dx:-4px;--dy:-24px"/>
+            <circle class="ember" cx="31" cy="11" r="1.6" fill="#FFF3B8" opacity="0" style="--dx:5px;--dy:-22px"/>
+            <circle class="ember" cx="24" cy="7"  r="1.4" fill="#FFD000" opacity="0" style="--dx:-2px;--dy:-26px"/>
+            <circle class="ember" cx="21" cy="10" r="1.1" fill="#FFF3B8" opacity="0" style="--dx:3px;--dy:-20px"/>
+            <circle class="ember" cx="28" cy="9"  r="1.2" fill="#FFE57F" opacity="0" style="--dx:-5px;--dy:-24px"/>
           </svg>
         </div>
       </button>
@@ -299,30 +294,25 @@
               <stop offset="100%" id="mig-bottom"  stop-color="#FFB800"/>
             </linearGradient>
           </defs>
-          <!-- Outer flame: pure teardrop -->
-          <path id="mf-outer" class="f-outer"
-            d="M24 3
-               C24 3 10 18 10 32
-               C10 44 16 57 24 57
-               C32 57 38 44 38 32
-               C38 18 24 3 24 3Z"
-            fill="url(#mOuterGrad)"/>
-          <!-- Inner core: smaller teardrop -->
-          <path id="mf-inner" class="f-inner"
-            d="M24 20
-               C24 20 16 30 16 38
-               C16 46 19.5 52 24 52
-               C28.5 52 32 46 32 38
-               C32 30 24 20 24 20Z"
-            fill="url(#mInnerGrad)"/>
-          <!-- Hot spark -->
-          <ellipse id="mf-spark" class="f-spark"
-            cx="24" cy="44" rx="4.5" ry="5.5"
-            fill="#FFF3B8"/>
-          <!-- Embers -->
-          <circle class="ember" cx="17" cy="14" r="2.0" fill="#FFF3B8" opacity="0"/>
-          <circle class="ember" cx="31" cy="11" r="1.6" fill="#FFF3B8" opacity="0"/>
-          <circle class="ember" cx="24" cy="7"  r="1.4" fill="#FFD000" opacity="0"/>
+          <!-- Side tongues: small licks of flame that flare up and die back on their own rhythm -->
+          <path class="f-tongue t1" d="M14 24 C14 24 8 31 8.5 38 C9 44 13 47 17 46 C20 44 19 36 14 24Z" fill="url(#mOuterGrad)"/>
+          <path class="f-tongue t2" d="M35 22 C35 22 41 30 40 37 C39.5 43 35 46 31 45 C28 43 29 34 35 22Z" fill="url(#mOuterGrad)"/>
+          <!-- Outer flame: the outline morphs between shapes so the tip bends, stretches and snaps back -->
+          <path id="mf-outer" class="f-outer" d="M24 3 C24 3 10 18 10 32 C10 44 16 57 24 57 C32 57 38 44 38 32 C38 18 24 3 24 3Z" fill="url(#mOuterGrad)">
+            <animate attributeName="d" dur="3.4s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.14;0.33;0.5;0.68;0.85;1" keySplines="0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1" values="M24 3 C24 3 10 18 10 32 C10 44 16 57 24 57 C32 57 38 44 38 32 C38 18 24 3 24 3Z;M27 0 C25 7 11 19 10 33 C10 45 16 57 24 57 C32 57 38 45 38 31 C38 17 29 8 27 0Z;M24 0 C23 8 12 21 11 33 C11 45 17 57 24 57 C31 57 37 45 37 33 C36 20 25 8 24 0Z;M20 5 C20 5 9 20 9 33 C9 45 15 57 24 57 C33 57 39 45 39 32 C39 19 21 9 20 5Z;M22 2 C26 8 11 19 10 32 C10 44 16 57 24 57 C32 57 38 44 38 33 C38 20 19 9 22 2Z;M27 0 C25 7 11 19 10 33 C10 45 16 57 24 57 C32 57 38 45 38 31 C38 17 29 8 27 0Z;M24 3 C24 3 10 18 10 32 C10 44 16 57 24 57 C32 57 38 44 38 32 C38 18 24 3 24 3Z"/>
+          </path>
+          <!-- Inner core: a faster, smaller shape of its own -->
+          <path id="mf-inner" class="f-inner" d="M24 20 C24 20 16 30 16 38 C16 46 19.5 52 24 52 C28.5 52 32 46 32 38 C32 30 24 20 24 20Z" fill="url(#mInnerGrad)">
+            <animate attributeName="d" dur="2.3s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.2;0.42;0.63;0.82;1" keySplines="0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1" values="M24 20 C24 20 16 30 16 38 C16 46 19.5 52 24 52 C28.5 52 32 46 32 38 C32 30 24 20 24 20Z;M25 17 C24 24 17 31 16 39 C16 47 19.5 52 24 52 C28.5 52 32 47 32 38 C32 30 26 22 25 17Z;M23 22 C23 22 15 31 16 38 C16 46 19.5 52 24 52 C28.5 52 33 46 33 39 C33 31 23 22 23 22Z;M24 18 C23 25 16 31 17 39 C17 47 20 52 24 52 C28 52 31 47 31 39 C32 31 25 24 24 18Z;M25 17 C24 24 17 31 16 39 C16 47 19.5 52 24 52 C28.5 52 32 47 32 38 C32 30 26 22 25 17Z;M24 20 C24 20 16 30 16 38 C16 46 19.5 52 24 52 C28.5 52 32 46 32 38 C32 30 24 20 24 20Z"/>
+          </path>
+          <!-- Hot centre -->
+          <ellipse id="mf-spark" class="f-spark" cx="24" cy="44" rx="4.5" ry="5.5" fill="#FFF3B8"/>
+          <!-- Embers drift up and sideways -->
+          <circle class="ember" cx="17" cy="14" r="2.0" fill="#FFF3B8" opacity="0" style="--dx:-4px;--dy:-24px"/>
+          <circle class="ember" cx="31" cy="11" r="1.6" fill="#FFF3B8" opacity="0" style="--dx:5px;--dy:-22px"/>
+          <circle class="ember" cx="24" cy="7"  r="1.4" fill="#FFD000" opacity="0" style="--dx:-2px;--dy:-26px"/>
+          <circle class="ember" cx="21" cy="10" r="1.1" fill="#FFF3B8" opacity="0" style="--dx:3px;--dy:-20px"/>
+          <circle class="ember" cx="28" cy="9"  r="1.2" fill="#FFE57F" opacity="0" style="--dx:-5px;--dy:-24px"/>
         </svg>
       </div>
 
@@ -396,10 +386,10 @@
 
       <h3 class="help-h">Streak</h3>
       <ul class="help-list">
-        <li>Complete at least one task a day to grow your streak. You have a 2-day grace period.</li>
+        <li>Complete at least one task a day to grow your streak. If you miss a day, you get 1 grace day: your streak is safe.</li>
         <li>Click the flame to see your week, month and stats.</li>
-        <li>Every 7 days you earn a streak freeze (up to 3). A freeze covers an extra missed day so your streak survives.</li>
-        <li>The flame changes color as the streak grows, with a confetti burst at 3, 7, 14, 30, 60, 100 and 365 days.</li>
+        <li>Every 7 days you earn a streak freeze (up to 3). Miss another day in a row after the grace day and a freeze is used for each extra missed day. With no freezes left, your streak resets to 0.</li>
+        <li>The flame changes color at 3, 7, 14, 30, 60, 100 and 365 days, with a confetti burst each time.</li>
       </ul>
 
       <h3 class="help-h">Other</h3>
@@ -440,6 +430,7 @@
   </div>
 
   <script src="nlp.js"></script>
+  <script src="streak-rules.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

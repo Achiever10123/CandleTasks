@@ -110,8 +110,12 @@ function sfxCelebrate() {
 // ── Flame tier config ─────────────────────────────────────────────
 const TIERS = [
   { min:-1,  outerTop:'#4B4847', outerBot:'#4B4847', innerTop:'#666463', innerBot:'#666463', spark:'#7A7877', glow:'rgba(100,100,100,0.3)', dayColor:'#555'    },
-  { min:1,   outerTop:'#FF9500', outerBot:'#FF7700', innerTop:'#FFD000', innerBot:'#FFB800', spark:'#FFF3B8', glow:'rgba(255,140,0,0.55)',  dayColor:'#FF7700'  },
-  { min:7,   outerTop:'#FF6500', outerBot:'#FF3D00', innerTop:'#FFB000', innerBot:'#FF8C00', spark:'#FFE57F', glow:'rgba(255,80,0,0.6)',    dayColor:'#FF3D00'  },
+  // 1-2 days: candle gold
+  { min:1,   outerTop:'#FFB300', outerBot:'#FF9800', innerTop:'#FFF59D', innerBot:'#FFD54F', spark:'#FFFDE7', glow:'rgba(255,170,0,0.55)',  dayColor:'#E69100'  },
+  // 3-6 days: orange
+  { min:3,   outerTop:'#FF8A00', outerBot:'#FF5A00', innerTop:'#FFD740', innerBot:'#FFA000', spark:'#FFF3B8', glow:'rgba(255,100,0,0.6)',   dayColor:'#FF6A00'  },
+  // 7-13 days: red
+  { min:7,   outerTop:'#FF4B2B', outerBot:'#D81B00', innerTop:'#FF9E40', innerBot:'#FF6A00', spark:'#FFE0B2', glow:'rgba(255,50,20,0.65)',  dayColor:'#E02B00'  },
   { min:14,  outerTop:'#D81B60', outerBot:'#B71C1C', innerTop:'#FF6090', innerBot:'#FF4081', spark:'#FFD1DC', glow:'rgba(200,20,80,0.65)',  dayColor:'#C2185B'  },
   { min:30,  outerTop:'#AA00FF', outerBot:'#8E24AA', innerTop:'#F080FF', innerBot:'#E040FB', spark:'#F8BBD0', glow:'rgba(160,0,255,0.6)',   dayColor:'#8E24AA'  },
   { min:60,  outerTop:'#FF1E8E', outerBot:'#F50057', innerTop:'#FFB0D0', innerBot:'#FF80AB', spark:'#FFF0F5', glow:'rgba(245,0,87,0.65)',   dayColor:'#F50057'  },
@@ -134,10 +138,19 @@ function applyFlameColors(svgEl, tier, active, ids) {
   $(ids.igBot).setAttribute('stop-color', tier.innerBot);
   $(ids.spark).setAttribute('fill', tier.spark);
 
-  const isLit = active && streak.count > 0;
+  const isLit = !!active;
   svgEl.classList.toggle('active', isLit);
   svgEl.classList.toggle('dead',  !isLit);
   svgEl.style.filter = isLit ? `drop-shadow(0 0 5px ${tier.glow})` : 'none';
+
+  // The outline morph is SVG animation (SMIL), which CSS cannot switch off: pause it when the flame is out
+  // or when the system asks for reduced motion, and rewind so a paused flame has its resting shape.
+  if (typeof svgEl.pauseAnimations === 'function') {
+    const still = !isLit || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    try {
+      if (still) { svgEl.setCurrentTime(0); svgEl.pauseAnimations(); } else svgEl.unpauseAnimations();
+    } catch (e) { /* not supported: the CSS animation still works */ }
+  }
 }
 
 // Ignition pop fires on the wrapper div so the child path animations keep running.
@@ -372,22 +385,22 @@ function normStreak(s) {
   return s;
 }
 
-// A streak survives a gap of up to 2 days for free, plus one extra day per freeze held
-function isActive() {
-  if (!streak.count || !streak.lastCompletedDate) return false;
-  const gap = dayDiff(streak.lastCompletedDate, todayStr());
-  return gap <= 2 + (streak.freezes || 0);
-}
+// The streak as it stands right now (rules in streak-rules.js): the first missed day is a free grace day, each
+// further missed day in a row uses a freeze, and with none left the streak is over. This is calculated, so the
+// freezes you see drop as soon as a day is missed, and a finished streak shows 0.
+function streakNow() { return StreakRules.evaluate(streak, todayStr()); }
+function isActive() { return streakNow().alive; }
 
+let uiDay = null;                 // the day the streak display was last drawn for
 function renderStreak() {
   const label  = $('streak-label');
   const svg    = $('flame-svg');
-  const active = isActive();
-  const tier   = getTier(streak.count, active);
+  const now    = streakNow();
+  const active = now.alive;
+  const tier   = getTier(now.count, active);
+  uiDay = todayStr();
 
-  label.textContent = !active || streak.count === 0
-    ? (streak.count > 0 ? `${streak.count}d (paused)` : '0 day streak')
-    : `${streak.count} day streak`;
+  label.textContent = `${now.count} day streak`;
 
   applyFlameColors(svg, tier, active, {
     ogTop:'og-top', ogBot:'og-bottom',
@@ -435,37 +448,22 @@ function checkStreak() {
   streak.journal.push({ date: today, count: streak.count, last: streak.lastCompletedDate, freezes: streak.freezes, best: streak.best });
   if (streak.journal.length > 30) streak.journal.shift();
 
-  // gap 1 = yesterday, 2 = one missed day (free), 3+ = extra missed days that need freezes
-  let wasActive = false, needed = 0;
-  if (streak.count > 0 && streak.lastCompletedDate) {
-    const gap = dayDiff(streak.lastCompletedDate, today);
-    needed = Math.max(0, gap - 2);
-    wasActive = needed <= streak.freezes;
-  }
-
-  if (wasActive) {
-    if (needed > 0) {
-      streak.freezes -= needed;
-      for (let k = 0; k < needed; k++) streak.frozenDates.push(addDays(streak.lastCompletedDate, 2 + k));
-      streak.frozenDates.sort();
-    }
-    streak.count += 1;
-  } else {
-    streak.count = 1;
-  }
-  streak.lastCompletedDate = today;
-  streak.best = Math.max(streak.best, streak.count);
-
-  let earned = false;
-  if (wasActive && streak.count % 7 === 0 && streak.freezes < 3) { streak.freezes += 1; earned = true; }
+  // The rules (streak-rules.js) decide: the first missed day was free, every further one in a row used a freeze,
+  // and if the freezes ran out the streak starts again at 1.
+  const r = StreakRules.applyCompletion(streak, today);
 
   saveStreakState();
   renderStreak();
   igniteFlame($('flame-icon'));
 
-  if (MILESTONES.includes(streak.count)) celebrate(streak.count, getTier(streak.count, true), earned);
-  else if (earned) showToast(`You earned a streak freeze. ${freezeLeft(streak.freezes)}`, null, null, 5500);
-  else if (needed > 0) showToast(`${needed} streak freeze${needed !== 1 ? 's' : ''} used to save your streak. ${freezeLeft(streak.freezes)}`, null, null, 5500);
+  if (MILESTONES.includes(streak.count)) celebrate(streak.count, getTier(streak.count, true), r.earned, r.used);
+  else {
+    // Nothing is said when the streak was reset: it is over, so "freezes used" would only mislead
+    const parts = [];
+    if (r.used > 0) parts.push(`${r.used} streak freeze${r.used !== 1 ? 's' : ''} used to save your streak.`);
+    if (r.earned) parts.push('You earned a streak freeze.');
+    if (parts.length) showToast(`${parts.join(' ')} ${freezeLeft(streak.freezes)}`, null, null, 5500);
+  }
 }
 
 // Save the streak; the main process merges it with the synced copy and returns the result.
@@ -510,8 +508,9 @@ function hideToast() { $('toast').classList.add('hidden'); }
 
 // ── Milestone celebration ─────────────────────────────────────────
 let confettiRaf = null;
-function celebrate(days, tier, earnedFreeze) {
-  showToast(`${days}-day streak! ${earnedFreeze ? `You earned a streak freeze. ${freezeLeft(streak.freezes)}` : 'Keep the fire going.'}`, null, null, 5500);
+function celebrate(days, tier, earnedFreeze, usedFreezes = 0) {
+  const used = usedFreezes > 0 ? `${usedFreezes} streak freeze${usedFreezes !== 1 ? 's' : ''} used to save it. ` : '';
+  showToast(`${days}-day streak! ${used}${earnedFreeze ? `You earned a streak freeze. ${freezeLeft(streak.freezes)}` : (used ? freezeLeft(streak.freezes) : 'Keep the fire going.')}`, null, null, 5500);
   sfxCelebrate();
   fireConfetti(tier);
 }
@@ -570,56 +569,70 @@ function fireConfetti(tier) {
 let calView = 'week';     // 'week' | 'month'
 let calOffset = 0;        // 0 = current week/month, -1 = previous, ...
 
-function currentTier() { return getTier(streak.count, isActive()); }
+function currentTier() { const n = streakNow(); return getTier(n.count, n.alive); }
+
+function streakMessage(now, doneToday) {
+  if (now.broken) return 'Your streak ended. Complete a task today to start a new one.';
+  if (!now.alive) return 'Complete a task today to start your streak.';
+  if (doneToday) return "You're on a roll! Today was added to your streak.";
+  if (now.used > 0) return `${now.used} streak freeze${now.used !== 1 ? 's' : ''} used while you were away. Complete a task today to keep your streak going!`;
+  if (now.graceUsed) {
+    return now.freezes > 0
+      ? 'You used your grace day. Miss today too and a streak freeze is used.'
+      : 'You used your grace day. Complete a task today or your streak resets.';
+  }
+  return 'Complete a task today to keep your streak going!';
+}
+
+// The modal keeps one size: it is measured once in the week view, then month and stats scroll inside it
+function lockStreakCardSize() {
+  const card = $('modal-card');
+  card.style.height = '';
+  const view = calView, offset = calOffset;
+  if (view !== 'week') { calView = 'week'; calOffset = 0; renderCalendar(); }
+  const natural = card.offsetHeight;
+  card.style.height = `${Math.min(natural, window.innerHeight - 24)}px`;
+  if (view !== 'week') { calView = view; calOffset = offset; renderCalendar(); }
+}
 
 function openStreakModal() {
   const modal   = $('streak-modal');
   const msgEl   = $('modal-msg');
   const msvg    = $('modal-flame-svg');
   const mwrap   = $('modal-flame-wrap');
-  const active  = isActive();
-  const tier    = getTier(streak.count, active);
+  const now     = streakNow();
+  const tier    = getTier(now.count, now.alive);
 
-  applyFlameColors(msvg, tier, active, {
+  applyFlameColors(msvg, tier, now.alive, {
     ogTop:'mog-top', ogBot:'mog-bottom',
     igTop:'mig-top', igBot:'mig-bottom',
     spark:'mf-spark'
   });
-  mwrap.style.filter = active && streak.count > 0 ? `drop-shadow(0 0 24px ${tier.glow})` : 'none';
-  $('modal-count').textContent = streak.count;
-
-  const doneToday = streak.completedDates.includes(todayStr());
-  if (!active || streak.count === 0) {
-    msgEl.textContent = 'Complete a task today to start your streak.';
-  } else if (doneToday) {
-    msgEl.textContent = "You're on a roll! Today was added to your streak.";
-  } else {
-    msgEl.textContent = 'Complete a task today to keep your streak going!';
-  }
-
-  renderFreezeInfo();
+  mwrap.style.filter = now.alive ? `drop-shadow(0 0 24px ${tier.glow})` : 'none';
+  $('modal-count').textContent = now.count;
+  msgEl.textContent = streakMessage(now, streak.completedDates.includes(todayStr()));
+  renderFreezeInfo(now);
 
   calOffset = 0;
   renderCalendar();
   modal.classList.remove('hidden');
+  lockStreakCardSize();
   $('modal-card').scrollTop = 0;
 
-  if (active && streak.count > 0) setTimeout(() => igniteFlame(mwrap), 150);
+  if (now.alive) setTimeout(() => igniteFlame(mwrap), 150);
 }
 
-// Streak freezes left, shown under the streak count. A freeze is earned on every 7th day of the streak (max 3).
-const MAX_FREEZES = 3;
+// Streak freezes left, shown under the streak count (after any used for missed days)
+const MAX_FREEZES = StreakRules.MAX_FREEZES;
 function freezeInfo(count, held) {
   const n = Math.max(0, Math.min(MAX_FREEZES, Math.floor(Number(held) || 0)));
-  const c = Math.max(0, Math.floor(Number(count) || 0));
   const main = n === 0 ? 'No streak freezes left' : `${n} of ${MAX_FREEZES} streak freezes left`;
-  const sub = n >= MAX_FREEZES ? 'Freezes are full'
-    : `Next freeze at day ${(Math.floor(c / 7) + 1) * 7}`;
+  const sub = n >= MAX_FREEZES ? 'Freezes are full' : `Next freeze at day ${StreakRules.nextFreezeDay(count)}`;
   return { n, main, sub };
 }
-function renderFreezeInfo() {
+function renderFreezeInfo(now = streakNow()) {
   const box = $('modal-freeze');
-  const info = freezeInfo(streak.count, streak.freezes);
+  const info = freezeInfo(now.count, now.freezes);
   box.textContent = '';
   const row = document.createElement('div');
   row.className = 'fz-row';
@@ -632,7 +645,7 @@ function renderFreezeInfo() {
   const main = document.createElement('div'); main.className = 'fz-text'; main.textContent = info.main;
   const sub  = document.createElement('div'); sub.className  = 'fz-sub';  sub.textContent  = info.sub;
   box.append(row, main, sub);
-  box.title = 'A freeze covers one extra missed day so your streak survives. You earn one every 7 days, up to 3.';
+  box.title = 'The first missed day is a free grace day. Each further missed day in a row uses a freeze. You earn one every 7 days, up to 3.';
 }
 
 function closeStreakModal() { $('streak-modal').classList.add('hidden'); }
@@ -666,7 +679,7 @@ function renderStats() {
 
   el.innerHTML = `
     <div class="stat-tiles">
-      <div class="stat-tile"><b>${streak.count}</b><span>Current streak</span></div>
+      <div class="stat-tile"><b>${streakNow().count}</b><span>Current streak</span></div>
       <div class="stat-tile"><b>${streak.best}</b><span>Best streak</span></div>
       <div class="stat-tile"><b>${total}</b><span>Tasks completed</span></div>
       <div class="stat-tile"><b>${streak.completedDates.length}</b><span>Active days</span></div>
@@ -683,6 +696,7 @@ function renderCalendar() {
   const grid  = $('modal-week');
   const today = todayStr();
   const done  = new Set(streak.completedDates);
+  const frozen = new Set([...(streak.frozenDates || []), ...streakNow().frozenDays]);   // includes freezes used since your last task
   const sorted = [...streak.completedDates].sort();
   const earliest = sorted.length ? sorted[0] : today;
   const dows = ['Su','Mo','Tu','We','Th','Fr','Sa'];
@@ -753,7 +767,7 @@ function renderCalendar() {
       box.classList.add('done');
       box.textContent = calView === 'week' ? '✓' : dayNum;
       box.style.color = '#fff';
-    } else if ((streak.frozenDates || []).includes(dateStr)) {
+    } else if (frozen.has(dateStr)) {
       box.classList.add('frozen');
       box.textContent = '❄';
       box.title = dateStr + ' (streak freeze)';
@@ -2149,12 +2163,20 @@ function checkWeeklyReview() {
   const over = overdueTasks().length;
   const body = total
     ? `You completed ${total} task${total !== 1 ? 's' : ''} this week${bestWd >= 0 ? ` (best day: ${DAY_FULL[bestWd]})` : ''}. `
-      + (over ? `${over} overdue. ` : 'Nothing overdue. ') + `Streak: ${streak.count} day${streak.count !== 1 ? 's' : ''}. Click for your stats.`
+      + (over ? `${over} overdue. ` : 'Nothing overdue. ') + `Streak: ${streakNow().count} day${streakNow().count !== 1 ? 's' : ''}. Click for your stats.`
     : `No tasks completed this week. ${over ? over + ' overdue. ' : ''}A fresh week starts tomorrow. Click for your stats.`;
   window.api.sendNotification({ title: 'Your week in review', body, action: 'stats' });
 }
 
+// At midnight the streak can change (a grace day or a freeze is used, or the streak ends): redraw it
+function refreshStreakDay() {
+  if (uiDay === todayStr()) return;
+  renderStreak();
+  if (!$('streak-modal').classList.contains('hidden')) openStreakModal();
+}
+
 function runTick() {
+  refreshStreakDay();
   checkClockDrift();
   applyRecurrence();
   checkOverdueNotifications();
@@ -2280,6 +2302,7 @@ document.querySelectorAll('#modal-tabs button').forEach(b => b.addEventListener(
   calView = b.dataset.view;
   calOffset = 0;
   renderCalendar();
+  $('modal-card').scrollTop = 0;
 }));
 $('cal-prev').addEventListener('click', () => { calOffset--; renderCalendar(); });
 $('cal-next').addEventListener('click', () => { if (calOffset < 0) { calOffset++; renderCalendar(); } });

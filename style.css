@@ -204,33 +204,44 @@ body.ui-bento .titlebar            { border-radius:12px 12px 0 0; }
   transform-origin: bottom center;
 }
 
-/* Idle flicker — outer flame */
+/* Flame: every part moves on its own rhythm, so the whole never repeats in lock-step.
+   The outline itself morphs (SVG animate in index.html); these add sway, flare and shimmer. */
 .flame-svg.active .f-outer {
-  animation: flickerOuter 2s ease-in-out infinite;
-  transform-origin: bottom center;
+  animation: flickerOuter 3.7s ease-in-out infinite;
+  transform-origin: 50% 100%;
 }
-/* Inner core counter-pulses out of phase */
 .flame-svg.active .f-inner {
-  animation: flickerInner 2s ease-in-out infinite;
+  animation: flickerInner 1.9s ease-in-out infinite;
   animation-delay: -0.7s;
-  transform-origin: bottom center;
+  transform-origin: 50% 100%;
 }
-/* Spark breathes */
 .flame-svg.active .f-spark {
-  animation: sparkPulse 2s ease-in-out infinite;
-  animation-delay: -1.1s;
-  transform-origin: center;
+  animation: sparkPulse 1.3s ease-in-out infinite;
+  animation-delay: -0.4s;
+  transform-origin: 50% 100%;
 }
-/* Ember particles rise */
-.flame-svg.active .ember:nth-child(1) { animation: emberRise 2.4s ease-in infinite; animation-delay: 0s; }
-.flame-svg.active .ember:nth-child(2) { animation: emberRise 2.4s ease-in infinite; animation-delay: 0.8s; }
-.flame-svg.active .ember:nth-child(3) { animation: emberRise 2.4s ease-in infinite; animation-delay: 1.6s; }
+/* Side tongues flare up and die back */
+.f-tongue { opacity: 0; transform-box: fill-box; transform-origin: 50% 100%; }
+.flame-svg.active .f-tongue.t1 { animation: tongue 2.3s ease-in-out infinite; }
+.flame-svg.active .f-tongue.t2 { animation: tongue 3.1s ease-in-out infinite; animation-delay: -1.4s; }
+/* Embers drift up and sideways (nth-of-type: the embers are the only circles) */
+.ember { transform-box: fill-box; transform-origin: 50% 50%; }
+.flame-svg.active .ember:nth-of-type(1) { animation: emberRise 2.6s ease-in infinite; animation-delay: 0s; }
+.flame-svg.active .ember:nth-of-type(2) { animation: emberRise 3.1s ease-in infinite; animation-delay: -0.9s; }
+.flame-svg.active .ember:nth-of-type(3) { animation: emberRise 2.2s ease-in infinite; animation-delay: -1.6s; }
+.flame-svg.active .ember:nth-of-type(4) { animation: emberRise 3.4s ease-in infinite; animation-delay: -2.2s; }
+.flame-svg.active .ember:nth-of-type(5) { animation: emberRise 2.8s ease-in infinite; animation-delay: -0.4s; }
 
 /* Dead state */
 .flame-svg.dead { opacity: 0.22; filter: grayscale(1) brightness(0.7); }
 .flame-svg.dead .f-outer,
 .flame-svg.dead .f-inner,
-.flame-svg.dead .f-spark { animation: none; }
+.flame-svg.dead .f-spark,
+.flame-svg.dead .f-tongue,
+.flame-svg.dead .ember { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .flame-svg * { animation: none !important; }
+}
 
 /* Ignition pop — applied to the WRAPPER div, not the SVG.
    This lets child .f-outer / .f-inner animations keep running
@@ -241,28 +252,42 @@ body.ui-bento .titlebar            { border-radius:12px 12px 0 0; }
   transform-origin: bottom center;
 }
 
-@keyframes flickerOuter {
-  0%   { transform: scaleY(1.00) skewX(-2deg); }
-  25%  { transform: scaleY(1.06) skewX( 1deg); }
-  50%  { transform: scaleY(0.98) skewX( 2deg); }
-  75%  { transform: scaleY(1.04) skewX(-1deg); }
-  100% { transform: scaleY(1.00) skewX(-2deg); }
+@keyframes flickerOuter {            /* uneven steps and amounts: sway, stretch, settle */
+  0%   { transform: scale(1.000, 1.000) skewX(-1.5deg); opacity: 1; }
+  11%  { transform: scale(1.015, 1.050) skewX( 1.2deg); opacity: .97; }
+  23%  { transform: scale(0.990, 0.970) skewX( 2.4deg); opacity: 1; }
+  38%  { transform: scale(1.010, 1.065) skewX(-0.6deg); opacity: .96; }
+  52%  { transform: scale(0.985, 0.985) skewX(-2.2deg); opacity: 1; }
+  67%  { transform: scale(1.012, 1.035) skewX( 1.0deg); opacity: .98; }
+  81%  { transform: scale(0.995, 1.010) skewX( 2.0deg); opacity: 1; }
+  100% { transform: scale(1.000, 1.000) skewX(-1.5deg); opacity: 1; }
 }
 @keyframes flickerInner {
-  0%   { transform: scaleY(1.02) scaleX(0.97); }
-  33%  { transform: scaleY(0.96) scaleX(1.03); }
-  66%  { transform: scaleY(1.05) scaleX(0.98); }
-  100% { transform: scaleY(1.02) scaleX(0.97); }
+  0%   { transform: scale(0.97, 1.02); opacity: .95; }
+  17%  { transform: scale(1.04, 0.95); opacity: 1; }
+  34%  { transform: scale(0.96, 1.07); opacity: .9; }
+  58%  { transform: scale(1.03, 0.98); opacity: 1; }
+  79%  { transform: scale(0.98, 1.05); opacity: .93; }
+  100% { transform: scale(0.97, 1.02); opacity: .95; }
 }
 @keyframes sparkPulse {
-  0%, 100% { opacity: 0.8; transform: scaleY(1.0); }
-  50%       { opacity: 1.0; transform: scaleY(1.1); }
+  0%   { opacity: .75; transform: scale(1, 1); }
+  18%  { opacity: 1;   transform: scale(1.08, 1.18); }
+  40%  { opacity: .82; transform: scale(.96, .94); }
+  63%  { opacity: 1;   transform: scale(1.04, 1.12); }
+  100% { opacity: .75; transform: scale(1, 1); }
+}
+@keyframes tongue {
+  0%, 100% { opacity: 0;   transform: scale(.55, .10); }
+  22%      { opacity: .9;  transform: scale(.90, .75) skewX( 5deg); }
+  45%      { opacity: .75; transform: scale(1.00, 1.00) skewX(-4deg); }
+  70%      { opacity: .35; transform: scale(.80, .45) skewX( 2deg); }
 }
 @keyframes emberRise {
-  0%   { opacity: 0;    transform: translateY(0)   scale(1); }
-  15%  { opacity: 0.9;  transform: translateY(-4px) scale(0.9); }
-  70%  { opacity: 0.5;  transform: translateY(-14px) scale(0.5); }
-  100% { opacity: 0;    transform: translateY(-22px) scale(0); }
+  0%   { opacity: 0;   transform: translate(0, 0) scale(1); }
+  12%  { opacity: .95; transform: translate(calc(var(--dx, 0px) * .1), calc(var(--dy, -22px) * .12)) scale(.95); }
+  60%  { opacity: .55; transform: translate(calc(var(--dx, 0px) * .7), calc(var(--dy, -22px) * .60)) scale(.55); }
+  100% { opacity: 0;   transform: translate(var(--dx, 0px), var(--dy, -22px)) scale(0); }
 }
 @keyframes ignite {
   0%   { transform: scale(0.6); }
@@ -1325,3 +1350,31 @@ body.compact .parse-hint { font-size:10px; }
 body.ui-glass .upd-bar { background:rgba(255,255,255,.08); }
 body.ui-brutalism .upd-bar, body.ui-brutalism .upd-btn { border-width:2px; border-radius:0; box-shadow:none; }
 body.ui-bento .upd-btn { border-radius:9px; }
+
+
+/* ── Modals: keep one size, scroll inside, with a custom scrollbar ─────────────
+   border-box so max-height really means the window (padding used to push the card past it);
+   widths below are the old content widths plus padding and border, so nothing looks different. */
+.modal-card { box-sizing:border-box; width:310px; }
+.modal-card > * { flex-shrink:0; }
+.help-card { width:342px; height:min(560px, calc(100vh - 24px)); }
+#update-card { height:230px; }
+#update-card .upd-actions { margin-top:auto; padding-top:14px; }
+
+.modal-card::-webkit-scrollbar { width:8px; }
+.modal-card::-webkit-scrollbar-track { background:transparent; margin:14px 0; }
+.modal-card::-webkit-scrollbar-thumb {
+  background:color-mix(in srgb, var(--accent) 55%, transparent); border-radius:999px;
+  border:2px solid transparent; background-clip:padding-box; transition:background .15s;
+}
+.modal-card::-webkit-scrollbar-thumb:hover  { background:var(--accent); background-clip:padding-box; }
+.modal-card::-webkit-scrollbar-thumb:active { background:var(--accent-2); background-clip:padding-box; }
+.modal-card::-webkit-scrollbar-corner { background:transparent; }
+body.ui-brutalism .modal-card::-webkit-scrollbar { width:12px; }
+body.ui-brutalism .modal-card::-webkit-scrollbar-track { margin:0; background:var(--bg-2); border-left:2px solid var(--border); }
+body.ui-brutalism .modal-card::-webkit-scrollbar-thumb { background:var(--accent); background-clip:border-box; border:2px solid var(--border); border-radius:0; }
+body.ui-brutalism .modal-card::-webkit-scrollbar-thumb:hover { background:var(--accent-2); background-clip:border-box; }
+body.ui-bento .modal-card::-webkit-scrollbar-thumb { border-radius:10px; }
+body.ui-glass .modal-card::-webkit-scrollbar-thumb { background:rgba(255,255,255,.28); background-clip:padding-box; }
+body.ui-glass.light .modal-card::-webkit-scrollbar-thumb { background:rgba(60,50,120,.28); background-clip:padding-box; }
+body.ui-glass .modal-card::-webkit-scrollbar-thumb:hover { background:var(--accent); background-clip:padding-box; }

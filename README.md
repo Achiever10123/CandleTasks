@@ -75,6 +75,20 @@ versions can't update themselves.
 
 ---
 
+## How streaks work
+
+- Complete at least one task a day to grow your streak.
+- **Grace day:** the first day you miss is forgiven, so your streak is safe.
+- **Freezes:** miss another day in a row and one streak freeze is used for each extra missed day.
+  You earn a freeze every 7 days (up to 3).
+- **Running out:** with no freeze left to cover a missed day, the streak resets to 0 and starts again at 1
+  with your next task.
+- The streak is worked out from your last completed day, so the freezes shown always match the days
+  you have missed, even before your next task. The rules live in `streak-rules.js` and are covered by tests.
+- The flame changes color at 3, 7, 14, 30, 60, 100 and 365 days.
+
+---
+
 ## Where your data is stored
 
 | File | Purpose |

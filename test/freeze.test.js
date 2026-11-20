@@ -4,13 +4,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const StreakRules = require('../streak-rules.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
 const chunk = src.slice(src.indexOf('const MAX_FREEZES'), src.indexOf('function closeStreakModal'));
+const todayFixed = () => '2026-11-20';
 const el = () => ({ className: '', textContent: '', children: [], title: '', appendChild(c) { this.children.push(c); }, append(...c) { this.children.push(...c); } });
 function load(streak) {
   const box = el();
-  const ctx = { streak, $: () => box, document: { createElement: el } };
+  const ctx = { streak, StreakRules, todayStr: todayFixed, streakNow: () => StreakRules.evaluate(streak, todayFixed()), $: () => box, document: { createElement: el } };
   vm.createContext(ctx);
   vm.runInContext(chunk + ';this.freezeInfo = freezeInfo; this.renderFreezeInfo = renderFreezeInfo;', ctx);
   return { ctx, box };
@@ -32,7 +34,7 @@ test('freezeInfo clamps bad values to 0..3', () => {
   assert.equal(ctx.freezeInfo('<img>', 1).sub, 'Next freeze at day 7');
 });
 test('renderFreezeInfo lights one snowflake per freeze held', () => {
-  const { ctx, box } = load({ count: 15, freezes: 2 });
+  const { ctx, box } = load({ count: 15, freezes: 2, lastCompletedDate: '2026-11-19' });   // 'today' in the test is 2026-11-20
   ctx.renderFreezeInfo();
   const [row, main, sub] = box.children;
   assert.deepEqual(row.children.map(c => c.className), ['fz on', 'fz on', 'fz']);
