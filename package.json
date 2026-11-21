@@ -25,17 +25,18 @@
       }
     ],
     "files": [
-      "main.js",
-      "preload.js",
-      "updater.js",
-      "index.html",
-      "style.css",
-      "app.js",
-      "nlp.js",
-      "streak-rules.js",
-      "quick.html",
-      "quick.js",
-      "icon.ico"
+      "package.json",
+  "main.js",
+  "preload.js",
+  "updater.js",
+  "index.html",
+  "style.css",
+  "app.js",
+  "nlp.js",
+  "streak-rules.js",
+  "quick.html",
+  "quick.js",
+  "icon.ico"
     ],
     "win": {
       "target": [
