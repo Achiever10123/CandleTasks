@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification, screen, dialog, Tray, Menu, nativeImage, shell, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, screen, dialog, Tray, Menu, nativeImage, shell, globalShortcut, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -17,6 +17,39 @@ let isQuitting = false;
 let inMini = false;
 let overdueCount = 0;
 
+// Only one copy may run: two copies would fight over the data files, watcher and global shortcut.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show(); mainWindow.focus();
+    }
+  });
+}
+
+// ── Renderer hardening ────────────────────────────────────────────
+// No new windows and no navigation away from our own pages.
+app.on('web-contents-created', (_e, wc) => {
+  wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+  wc.on('will-navigate', e => e.preventDefault());
+});
+
+// IPC is only honoured from our own bundled pages (index.html / quick.html loaded from file://).
+function trustedSender(e) {
+  try {
+    const u = e && e.senderFrame && e.senderFrame.url;
+    return typeof u === 'string' && u.startsWith('file://') && /\/(index|quick)\.html(?:[?#].*)?$/.test(u);
+  } catch (_) { return false; }
+}
+function handle(channel, fn) {
+  ipcMain.handle(channel, (e, ...args) => {
+    if (!trustedSender(e)) throw new Error('Blocked IPC from untrusted sender: ' + channel);
+    return fn(e, ...args);
+  });
+}
+
 // ── Default settings ──────────────────────────────────────────────
 const defaultSettings = {
   alwaysOnTop: true,
@@ -33,6 +66,7 @@ const defaultSettings = {
   compactMode: false,
   customColor: '#c97b2a',
   launchAtLogin: false,
+  autoUpdate: true,
   weeklyReview: true,
   reviewTime: '18:00',
   miniMode: false,
@@ -42,17 +76,54 @@ const defaultSettings = {
   windowBounds: { width: 320, height: 580, x: null, y: null }
 };
 
+let settingsCache = null;
+
 function loadSettings() {
-  try {
-    if (fs.existsSync(settingsFilePath)) {
-      return { ...defaultSettings, ...JSON.parse(fs.readFileSync(settingsFilePath, 'utf8')) };
-    }
-  } catch (e) {}
-  return { ...defaultSettings };
+  if (!settingsCache) {
+    settingsCache = { ...defaultSettings };
+    try {
+      if (fs.existsSync(settingsFilePath)) {
+        const raw = fs.readFileSync(settingsFilePath, 'utf8');
+        try {
+          settingsCache = { ...defaultSettings, ...JSON.parse(raw) };
+        } catch (e) {
+          // Unreadable settings: keep a copy instead of silently resetting everything
+          try { fs.copyFileSync(settingsFilePath, settingsFilePath.replace(/\.json$/, `.corrupt-${Date.now()}.json`)); } catch (_) {}
+        }
+      }
+    } catch (e) {}
+  }
+  return JSON.parse(JSON.stringify(settingsCache));      // callers mutate their copy, then call saveSettings
 }
 
 function saveSettings(settings) {
-  fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2));
+  settingsCache = JSON.parse(JSON.stringify(settings));
+  const json = JSON.stringify(settings, null, 2);
+  try {
+    const tmp = settingsFilePath + '.tmp';
+    fs.writeFileSync(tmp, json);
+    fs.renameSync(tmp, settingsFilePath);
+  } catch (e) {
+    try { fs.writeFileSync(settingsFilePath, json); } catch (_) {}
+  }
+}
+
+// Whitelist + type-check anything that arrives from the renderer or from a backup file.
+const BOOL_SETTINGS = ['alwaysOnTop', 'darkMode', 'reminderEnabled', 'minimizeToTray', 'soundEnabled',
+  'notifyOverdue', 'globalQuickAdd', 'compactMode', 'launchAtLogin', 'weeklyReview', 'autoUpdate'];
+function sanitizeSettings(incoming) {
+  const s = incoming && typeof incoming === 'object' ? incoming : {};
+  const out = {};
+  for (const k of BOOL_SETTINGS) if (typeof s[k] === 'boolean') out[k] = s[k];
+  if (['none', 'top', 'bottom', 'left', 'right'].includes(s.snapPosition)) out.snapPosition = s.snapPosition;
+  if (['default', 'green', 'blue', 'red', 'custom', 'yellow'].includes(s.themeColor)) out.themeColor = s.themeColor;
+  if (['default', 'glass', 'minimal', 'brutalism', 'bento'].includes(s.uiStyle)) out.uiStyle = s.uiStyle;
+  if (typeof s.customColor === 'string' && /^#[0-9a-f]{6}$/i.test(s.customColor)) out.customColor = s.customColor;
+  for (const k of ['reminderTime', 'reviewTime']) {
+    if (typeof s[k] === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s[k])) out[k] = s[k];
+  }
+  if (s.windowOpacity !== undefined && isFinite(Number(s.windowOpacity))) out.windowOpacity = clampOpacity(s.windowOpacity);
+  return out;
 }
 
 function clampOpacity(v) {
@@ -73,7 +144,7 @@ function emptyStreak() {
 
 function readStreakFile(p) {
   try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'));
+    if (fs.existsSync(p)) return cleanStreak(JSON.parse(fs.readFileSync(p, 'utf8')));
   } catch (e) {}
   return null;
 }
@@ -164,9 +235,19 @@ function saveStreak(data) {
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 function hash(str) { return crypto.createHash('sha1').update(str).digest('hex'); }
 
+let syncWarned = false;
 function dataDir() {
   const s = loadSettings();
-  if (s.syncFolder && fs.existsSync(s.syncFolder)) return s.syncFolder;
+  if (s.syncFolder && fs.existsSync(s.syncFolder)) { syncWarned = false; return s.syncFolder; }
+  if (s.syncFolder && !syncWarned && app.isReady()) {
+    syncWarned = true;                       // tell the user once: edits now go to the local copy
+    try {
+      if (Notification.isSupported()) new Notification({
+        title: 'CandleTasks: sync folder not found',
+        body: 'Using the local copy for now. Reconnect the folder and restart to resume syncing.'
+      }).show();
+    } catch (e) {}
+  }
   return userDataPath;
 }
 const dataPath   = () => path.join(dataDir(), 'tasks.json');
@@ -179,22 +260,34 @@ function defaultData() {
   return { version: 2, lists: [{ id, name: 'Tasks' }], activeListId: id, tasks: [], tagColors: {} };
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function cleanDate(v) {
+  if (typeof v !== 'string' || !DATE_RE.test(v)) return null;
+  const [y, m, d] = v.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d ? v : null;
+}
+const LIMITS = { text: 120, notes: 2000, step: 120, steps: 100, tag: 24, tags: 20, listName: 60, lists: 50, id: 64 };
+const cleanId = v => String(v).slice(0, LIMITS.id);
+
 function normalizeTask(t, fallbackListId) {
+  t = t && typeof t === 'object' ? t : {};
+  const due = cleanDate(t.due);
   return {
-    id: t.id ? String(t.id) : uid(),
-    listId: t.listId || fallbackListId,
-    text: String(t.text || '').slice(0, 120),
+    id: t.id ? cleanId(t.id) : uid(),
+    listId: t.listId ? cleanId(t.listId) : fallbackListId,
+    text: String(t.text || '').slice(0, LIMITS.text),
     done: !!t.done,
-    due: t.due || null,
-    dueTime: t.due && /^\d{2}:\d{2}$/.test(String(t.dueTime || '')) ? t.dueTime : null,
-    addedDate: t.addedDate || null,
-    completedDate: t.completedDate || null,
+    due,
+    dueTime: due && /^([01]\d|2[0-3]):[0-5]\d$/.test(String(t.dueTime || '')) ? t.dueTime : null,
+    addedDate: cleanDate(t.addedDate),
+    completedDate: cleanDate(t.completedDate),
     archived: !!t.archived,
     pinned: !!t.pinned,
-    tags: Array.isArray(t.tags) ? t.tags.map(String).map(s => s.trim()).filter(Boolean) : [],
-    notes: typeof t.notes === 'string' ? t.notes : '',
+    tags: Array.isArray(t.tags) ? t.tags.map(String).map(s => s.trim().slice(0, LIMITS.tag)).filter(Boolean).slice(0, LIMITS.tags) : [],
+    notes: typeof t.notes === 'string' ? t.notes.slice(0, LIMITS.notes) : '',
     subtasks: Array.isArray(t.subtasks)
-      ? t.subtasks.map(s => ({ id: s && s.id ? String(s.id) : uid(), text: String((s && s.text) || ''), done: !!(s && s.done) }))
+      ? t.subtasks.slice(0, LIMITS.steps).map(s => ({ id: s && s.id ? cleanId(s.id) : uid(), text: String((s && s.text) || '').slice(0, LIMITS.step), done: !!(s && s.done) }))
       : [],
     priority: [0, 1, 2, 3].includes(Number(t.priority)) ? Number(t.priority) : 0,
     recur: ['daily', 'weekly', 'days', 'every', 'after', 'monthday'].includes(t.recur) ? t.recur : null,
@@ -215,14 +308,14 @@ function normalizeRecur(t) {
 function normalizeData(d) {
   d = d && typeof d === 'object' ? d : {};
   let lists = Array.isArray(d.lists)
-    ? d.lists.filter(l => l && l.id).map(l => ({ id: String(l.id), name: String(l.name || 'List') }))
+    ? d.lists.filter(l => l && l.id).slice(0, LIMITS.lists).map(l => ({ id: cleanId(l.id), name: String(l.name || 'List').replace(/[\r\n]+/g, ' ').slice(0, LIMITS.listName) }))
     : [];
   if (!lists.length) lists = [{ id: uid(), name: 'Tasks' }];
   const ids = new Set(lists.map(l => l.id));
   const tasks = (Array.isArray(d.tasks) ? d.tasks : [])
     .map(t => normalizeRecur(normalizeTask(t, lists[0].id)))
     .map(t => (ids.has(t.listId) ? t : { ...t, listId: lists[0].id }));
-  const activeListId = ids.has(d.activeListId) ? d.activeListId : lists[0].id;
+  const activeListId = ids.has(d.activeListId) ? String(d.activeListId) : lists[0].id;
   const tagColors = {};
   if (d.tagColors && typeof d.tagColors === 'object') {
     for (const [k, v] of Object.entries(d.tagColors)) {
@@ -293,17 +386,28 @@ function saveData(data) {
   try { fs.writeFileSync(mirrorPath(), buildMirror(clean)); } catch (e) {}
 }
 
-function loadData() {
+function sleepSync(ms) { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch (e) {} }
+
+// opts.strict: throw instead of returning an empty list when the file exists but can't be read
+// (e.g. a cloud-sync client is half-way through writing it). Callers that write back must use it.
+function loadData(opts = {}) {
   const p = dataPath();
-  try {
-    if (fs.existsSync(p)) {
-      const raw = fs.readFileSync(p, 'utf8');
-      lastWrittenHash = hash(raw);
-      return normalizeData(JSON.parse(raw));
+  if (fs.existsSync(p)) {
+    let raw = '', lastErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        raw = fs.readFileSync(p, 'utf8');
+        const parsed = JSON.parse(raw);
+        lastWrittenHash = hash(raw);
+        return normalizeData(parsed);
+      } catch (e) { lastErr = e; sleepSync(250); }
     }
-  } catch (e) {
-    // Unreadable file: keep a copy before anything can overwrite it
-    try { fs.copyFileSync(p, p.replace(/\.json$/, `.corrupt-${Date.now()}.json`)); } catch (_) {}
+    // Still unreadable: keep one copy per distinct content (not one per call), never overwrite silently
+    try {
+      const keep = p.replace(/\.json$/, `.corrupt-${hash(raw).slice(0, 8)}.json`);
+      if (!fs.existsSync(keep)) fs.copyFileSync(p, keep);
+    } catch (_) {}
+    if (opts.strict) throw lastErr || new Error('tasks.json unreadable');
     return defaultData();
   }
 
@@ -501,7 +605,7 @@ function openQuickAdd(fromShortcut) {
     frame: false, resizable: false, minimizable: false, maximizable: false,
     alwaysOnTop: true, skipTaskbar: true, show: false,
     backgroundColor: s.darkMode ? '#1a1510' : '#fdf6ec',
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
   quickWin.loadFile('quick.html');
   quickWin.once('ready-to-show', () => {
@@ -520,7 +624,10 @@ function openQuickAdd(fromShortcut) {
 function createWindow() {
   const settings = loadSettings();
   inMini = !!settings.miniMode;
-  const { width, height, x, y } = inMini ? { ...settings.miniBounds, x: settings.windowBounds.x, y: settings.windowBounds.y } : settings.windowBounds;
+  const wb = inMini ? { ...settings.miniBounds, x: settings.windowBounds.x, y: settings.windowBounds.y } : settings.windowBounds;
+  const { width, height } = wb;
+  let { x, y } = wb;
+  if (!isOnScreen(x, y, width, height)) { x = null; y = null; }     // monitor unplugged / bad saved position
   const startHidden = process.argv.includes('--autostart') && !!settings.minimizeToTray;
 
   mainWindow = new BrowserWindow({
@@ -541,6 +648,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
       backgroundThrottling: false     // keep timers exact while the window is hidden in the tray
     },
     backgroundColor: settings.darkMode ? '#1a1510' : '#fdf6ec'
@@ -555,8 +663,8 @@ function createWindow() {
     refreshBadges();
   });
 
-  mainWindow.on('resize', saveBounds);
-  mainWindow.on('moved', saveBounds);
+  mainWindow.on('resize', saveBoundsSoon);
+  mainWindow.on('moved', saveBoundsSoon);
 
   mainWindow.on('close', (e) => {
     const s = loadSettings();
@@ -568,8 +676,23 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
+function isOnScreen(x, y, w, h) {
+  if (typeof x !== 'number' || typeof y !== 'number') return false;
+  try {
+    return screen.getAllDisplays().some(d => {
+      const a = d.workArea;
+      return x + 40 < a.x + a.width && x + (w || 0) - 40 > a.x && y >= a.y - 8 && y + 40 < a.y + a.height;
+    });
+  } catch (e) { return true; }
+}
+
+let boundsTimer = null;
+function saveBoundsSoon() { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 400); }
+
 function saveBounds() {
-  if (!mainWindow) return;
+  clearTimeout(boundsTimer);
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized() || mainWindow.isMaximized() || mainWindow.isFullScreen()) return;   // Windows reports -32000 when minimised
   const settings = loadSettings();
   const [width, height] = mainWindow.getSize();
   const [x, y] = mainWindow.getPosition();
@@ -663,12 +786,12 @@ function cleanStreak(s) {
     if (isDate(k) && Number(v) > 0) done[k] = Math.floor(Number(v));
   }
   return {
-    count: Math.max(0, Number(s.count) || 0),
+    count: Math.min(100000, Math.max(0, Math.floor(Number(s.count) || 0))),
     lastCompletedDate: isDate(s.lastCompletedDate || '') ? s.lastCompletedDate : null,
     completedDates: dates,
     freezes: Math.max(0, Math.min(3, Math.floor(Number(s.freezes) || 0))),
     frozenDates: Array.isArray(s.frozenDates) ? [...new Set(s.frozenDates.filter(isDate))].sort() : [],
-    best: Math.max(0, Math.floor(Number(s.best) || 0), Math.floor(Number(s.count) || 0)),
+    best: Math.min(100000, Math.max(0, Math.floor(Number(s.best) || 0), Math.floor(Number(s.count) || 0))),
     doneByDate: done,
     journal: (Array.isArray(s.journal) ? s.journal : []).filter(e => e && isDate(e.date)).slice(-30).map(e => ({
       date: e.date, count: Math.max(0, Number(e.count) || 0), last: isDate(e.last || '') ? e.last : null,
@@ -678,20 +801,33 @@ function cleanStreak(s) {
 }
 
 // ── IPC handlers ──────────────────────────────────────────────────
-ipcMain.handle('get-data', () => loadData());
-ipcMain.handle('save-data', (_, data) => { saveData(data); return true; });
-ipcMain.handle('get-data-path', () => dataPath());
+const updater = require('./updater');
+updater.registerIpc(handle);
 
-ipcMain.handle('choose-sync-folder', async () => {
+handle('get-data', () => loadData());
+handle('save-data', (_, data) => { saveData(data); return true; });
+handle('get-data-path', () => dataPath());
+
+let approvedSyncFolder = null;
+handle('choose-sync-folder', async () => {
   const { filePaths, canceled } = await dialog.showOpenDialog(mainWindow, {
     title: 'Choose a sync folder (e.g. inside Dropbox)',
     properties: ['openDirectory', 'createDirectory']
   });
-  return canceled || !filePaths.length ? null : filePaths[0];
+  if (canceled || !filePaths.length) return null;
+  approvedSyncFolder = filePaths[0];
+  return approvedSyncFolder;
 });
 
-ipcMain.handle('set-sync-folder', (_, folder) => {
-  const current = loadData();                 // read from the OLD location first
+handle('set-sync-folder', (_, folder) => {
+  folder = typeof folder === 'string' ? folder : '';
+  if (folder) {
+    const ok = folder === approvedSyncFolder || folder === loadSettings().syncFolder;
+    let isDir = false;
+    try { isDir = fs.statSync(folder).isDirectory(); } catch (e) {}
+    if (!ok || !isDir) throw new Error('Sync folder must be chosen with the folder picker.');
+  }
+  const current = loadData({ strict: true }); // read from the OLD location first; refuse if unreadable
   const currentStreak = loadStreak();
   const settings = loadSettings();
   settings.syncFolder = folder || '';
@@ -718,16 +854,16 @@ ipcMain.handle('set-sync-folder', (_, folder) => {
   return { data, syncFolder: settings.syncFolder, streak };
 });
 
-ipcMain.handle('get-settings', () => loadSettings());
-ipcMain.handle('save-settings', (_, incoming, opts) => {
+handle('get-settings', () => loadSettings());
+handle('save-settings', (_, incoming, opts) => {
   const cur = loadSettings();
   // Renderer copies of bounds / syncFolder can be stale — main owns them
-  const settings = { ...cur, ...incoming, windowBounds: cur.windowBounds, syncFolder: cur.syncFolder };
+  const settings = { ...cur, ...sanitizeSettings(incoming) };    // main owns bounds, mini mode and syncFolder
   saveSettings(settings);
   applySettingsEffects(settings, { keepPosition: !!(opts && opts.keepPosition) });
   return { ok: true, shortcutOk: settings.globalQuickAdd === false ? true : shortcutOk, loginOk: settings.launchAtLogin ? loginOk : true };
 });
-ipcMain.handle('set-mini', (_, on) => {
+handle('set-mini', (_, on) => {
   if (!mainWindow || mainWindow.isDestroyed()) return false;
   on = !!on;
   if (on === inMini) return true;
@@ -748,42 +884,45 @@ ipcMain.handle('set-mini', (_, on) => {
   }
   return true;
 });
-ipcMain.handle('set-opacity', (_, v) => { mainWindow?.setOpacity(clampOpacity(v)); return true; });
+handle('set-opacity', (_, v) => { mainWindow?.setOpacity(clampOpacity(v)); return true; });
 
-ipcMain.handle('get-streak', () => {
+handle('get-streak', () => {
   const r = pruneFutureStreak(loadStreak());
   if (r.changed) saveStreak(r.streak);
   return r.streak;
 });
-ipcMain.handle('update-streak', (_, data) => {
+handle('update-streak', (_, data) => {
   // Merge with disk so a stale device can never overwrite another device's progress.
   // Future-dated entries (clock changes) are dropped on both sides first so they can't come back.
   const disk = pruneFutureStreak(readStreakFile(streakPath()) || emptyStreak()).streak;
-  const merged = mergeStreak(disk, pruneFutureStreak(data).streak);
+  const merged = mergeStreak(disk, pruneFutureStreak(cleanStreak(data)).streak);
   saveStreak(merged);
   return merged;
 });
-ipcMain.handle('prune-streak', (_, incoming) => {
-  const r = pruneFutureStreak(incoming && typeof incoming === 'object' ? incoming : emptyStreak());
+handle('prune-streak', (_, incoming) => {
+  const r = pruneFutureStreak(cleanStreak(incoming));
   if (r.changed) saveStreak(r.streak);
   return r;
 });
 
-ipcMain.handle('set-overdue', (_, n, dataUrl) => {
+handle('set-overdue', (_, n, dataUrl) => {
   const v = Math.max(0, Number(n) || 0);
-  if (typeof dataUrl === 'string' && dataUrl.startsWith('data:image/png')) {
+  if (typeof dataUrl === 'string' && dataUrl.startsWith('data:image/png;base64,') && dataUrl.length < 200000) {
     try { badgeImage = nativeImage.createFromDataURL(dataUrl); } catch (e) { badgeImage = null; }
   }
   if (v !== overdueCount || dataUrl) { overdueCount = v; refreshBadges(); }
   return true;
 });
 
-ipcMain.handle('quick-add', (_, { text, listId }) => {
-  const raw = String(text || '').trim().slice(0, 140);
+handle('quick-add', (_, payload) => {
+  const { text, listId } = payload && typeof payload === 'object' ? payload : {};
+  const raw = String(typeof text === 'string' ? text : '').trim().slice(0, 140);
   if (!raw) return false;
-  const data = loadData();
+  let data;
+  try { data = loadData({ strict: true }); }
+  catch (e) { return false; }                 // file busy/unreadable: do NOT overwrite it with a fresh list
   const p = NLP.parse(raw, new Date());                // plain-word dates, repeats, #tags, !priority
-  const targetList = data.lists.some(l => l.id === listId) ? listId : data.activeListId;
+  const targetList = typeof listId === 'string' && data.lists.some(l => l.id === listId) ? listId : data.activeListId;
   const today = new Date();
   const ds = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   data.tasks.push(normalizeRecur(normalizeTask({
@@ -795,9 +934,13 @@ ipcMain.handle('quick-add', (_, { text, listId }) => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('data-changed', data);
   return true;
 });
-ipcMain.handle('close-quick', () => { if (quickWin && !quickWin.isDestroyed()) quickWin.close(); return true; });
+handle('close-quick', () => { if (quickWin && !quickWin.isDestroyed()) quickWin.close(); return true; });
 
-ipcMain.handle('send-notification', (_, { title, body, action }) => {
+handle('send-notification', (_, opts) => {
+  const o = opts && typeof opts === 'object' ? opts : {};
+  const title = String(o.title || 'CandleTasks').slice(0, 100);
+  const body = String(o.body || '').slice(0, 300);
+  const action = o.action === 'stats' ? 'stats' : null;
   if (Notification.isSupported()) {
     const n = new Notification({ title, body });
     n.on('click', () => {
@@ -811,15 +954,15 @@ ipcMain.handle('send-notification', (_, { title, body, action }) => {
   return true;
 });
 
-ipcMain.handle('minimize-window', () => mainWindow?.minimize());
-ipcMain.handle('close-window', () => {
+handle('minimize-window', () => mainWindow?.minimize());
+handle('close-window', () => {
   const settings = loadSettings();
   if (settings.minimizeToTray) mainWindow?.hide();
   else mainWindow?.close();
 });
 
 // ── Backup / restore IPC ──────────────────────────────────────────
-ipcMain.handle('backup-data', () => {
+handle('backup-data', () => {
   try {
     fs.mkdirSync(backupDir(), { recursive: true });
     const filePath = path.join(backupDir(), `candletasks-backup-${stampNow()}.json`);
@@ -830,9 +973,16 @@ ipcMain.handle('backup-data', () => {
   }
 });
 
-ipcMain.handle('show-in-folder', (_, p) => { try { shell.showItemInFolder(p); } catch (e) {} return true; });
+handle('show-in-folder', (_, p) => {
+  try {
+    const target = path.resolve(String(p || ''));
+    const root = path.resolve(backupDir());
+    if (target.startsWith(root + path.sep)) shell.showItemInFolder(target);   // only our backup folder
+  } catch (e) {}
+  return true;
+});
 
-ipcMain.handle('restore-data', async () => {
+handle('restore-data', async () => {
   const { filePaths, canceled } = await dialog.showOpenDialog(mainWindow, {
     title: 'Restore from backup',
     defaultPath: backupDir(),
@@ -868,16 +1018,17 @@ ipcMain.handle('restore-data', async () => {
   saveData(data);
   const streak = cleanStreak(payload.streak);
   saveStreak(streak);
-  const settings = { ...loadSettings(), ...portableSettings(payload.settings || {}) };
+  const settings = { ...loadSettings(), ...sanitizeSettings(portableSettings(payload.settings || {})) };
   saveSettings(settings);
   applySettingsEffects(settings);
   return { ok: true, data, streak, settings, safetyCopy };
 });
 
-app.on('before-quit', () => { isQuitting = true; stopWatching(); });
+app.on('before-quit', () => { isQuitting = true; saveBounds(); stopWatching(); });
 app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (e) {} });
 
 app.whenReady().then(() => {
+  session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
   loadData();            // runs the v1 → v2 migration early if needed
   createWindow();
   startWatching();
@@ -885,9 +1036,13 @@ app.whenReady().then(() => {
   if (settings.minimizeToTray) createTray();
   registerGlobalShortcut(settings.globalQuickAdd !== false);
   if (settings.launchAtLogin) applyLoginItem(true);       // keep the saved path current (e.g. portable builds)
+  updater.start({ getWindow: () => mainWindow, getSettings: loadSettings, beforeInstall: () => { isQuitting = true; } });
 });
 
 app.on('window-all-closed', () => {
   const settings = loadSettings();
   if (!settings.minimizeToTray) app.quit();
 });
+
+// Pure helpers exported for tests (test/main.test.js stubs 'electron')
+module.exports = { normalizeData, normalizeTask, cleanStreak, mergeStreak, pruneFutureStreak, sanitizeSettings, cleanDate };

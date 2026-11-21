@@ -30,5 +30,13 @@ contextBridge.exposeInMainWorld('api', {
   showInFolder: (p) => ipcRenderer.invoke('show-in-folder', p),
   // quick-add popup
   quickAdd: (payload) => ipcRenderer.invoke('quick-add', payload),
-  closeQuick: () => ipcRenderer.invoke('close-quick')
+  closeQuick: () => ipcRenderer.invoke('close-quick'),
+  // app updates
+  getUpdateState: () => ipcRenderer.invoke('update-state'),
+  checkForUpdate: () => ipcRenderer.invoke('update-check'),
+  downloadUpdate: () => ipcRenderer.invoke('update-download'),
+  installUpdate: () => ipcRenderer.invoke('update-install'),
+  updateLater: () => ipcRenderer.invoke('update-later'),
+  openReleasePage: () => ipcRenderer.invoke('update-open-page'),
+  onUpdateStatus: (cb) => ipcRenderer.on('update-status', (_e, st) => cb(st))
 });

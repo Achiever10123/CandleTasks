@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CandleTasks</title>
   <link rel="stylesheet" href="style.css" />
@@ -256,6 +257,17 @@
         <button class="download-btn" id="restore-btn">Restore from file...</button>
       </div>
     </div>
+    <div class="setting-row">
+      <span>Check for updates automatically</span>
+      <label class="toggle"><input type="checkbox" id="set-auto-update"/><span class="slider"></span></label>
+    </div>
+    <div class="setting-row tasks-path-row" id="update-row">
+      <span>App updates</span>
+      <span class="tasks-path" id="upd-status">...</span>
+      <div class="sync-actions">
+        <button class="download-btn" id="upd-check">Check for updates</button>
+      </div>
+    </div>
     <div class="setting-row tasks-path-row" id="sync-row">
       <span>Sync folder (Dropbox, OneDrive...)</span>
       <span class="tasks-path" id="sync-path-label">Not set (stored on this device)</span>
@@ -318,6 +330,9 @@
       <div class="modal-count" id="modal-count">0</div>
       <div class="modal-label">day streak!</div>
 
+      <!-- Streak freezes left (filled in by renderFreezeInfo) -->
+      <div class="modal-freeze" id="modal-freeze" aria-live="polite"></div>
+
       <!-- History: week / month -->
       <div class="modal-tabs" id="modal-tabs">
         <button class="active" data-view="week">Week</button>
@@ -334,7 +349,6 @@
       <div class="stats-view hidden" id="stats-view"></div>
 
       <!-- Message -->
-      <div class="modal-freeze" id="modal-freeze"></div>
       <p class="modal-msg" id="modal-msg">Complete a task today to start your streak.</p>
     </div>
   </div>
@@ -413,6 +427,17 @@
   </div>
 
   <canvas id="confetti-canvas"></canvas>
+
+  <!-- App update dialog -->
+  <div class="modal-overlay hidden" id="update-modal">
+    <div class="modal-card help-card" id="update-card" role="dialog" aria-labelledby="upd-title">
+      <button class="modal-close" id="upd-close" aria-label="Close">&#10005;</button>
+      <h2 class="help-title" id="upd-title">Update available</h2>
+      <p class="upd-msg" id="upd-msg"></p>
+      <div class="upd-bar hidden" id="upd-bar"><div class="upd-fill" id="upd-fill"></div></div>
+      <div class="upd-actions" id="upd-actions"></div>
+    </div>
+  </div>
 
   <script src="nlp.js"></script>
   <script src="app.js"></script>

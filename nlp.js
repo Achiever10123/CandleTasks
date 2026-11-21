@@ -44,6 +44,11 @@
     for (let k = includeToday ? 0 : 1; k <= 7; k++) { const d = plusDays(from, k); if (d.getDay() === wd) return d; }
     return plusDays(from, 1);
   }
+  // "next friday": that weekday in the calendar week (Mon-Sun) after the current one
+  function weekdayOfNextWeek(from, wd) {
+    const toNextMonday = ((8 - from.getDay()) % 7) || 7;
+    return plusDays(from, toNextMonday + ((wd + 6) % 7));
+  }
   function nextMonthDay(from, md) {                       // first date >= from whose day-of-month is md (clamped)
     let y = from.getFullYear(), m = from.getMonth();
     for (let i = 0; i < 14; i++) {
@@ -54,24 +59,33 @@
     return from;
   }
 
+  // opts.dmy (default true): "on 3/4" means 3 April. Pass dmy:false for US-style month/day.
   function parse(raw, now, opts) {
     now = now || new Date();
-    opts = Object.assign({ tags: true, priority: true, dates: true, repeats: true }, opts || {});
+    opts = Object.assign({ tags: true, priority: true, dates: true, repeats: true, dmy: true }, opts || {});
     const today = dayOnly(now);
     const nowHM = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    let s = ' ' + String(raw) + ' ';
+    const original = ' ' + String(raw) + ' ';
+    let s = original;
     const out = { text: '', tags: [], priority: 0, due: null, dueTime: null, recur: null, found: [] };
+
+    // Remove the first match that fn() accepts. A rejected match (fn returns false) no longer blocks later ones,
+    // e.g. "wed" used as an ordinary word followed by a real "on friday".
     const take = (re, fn) => {
-      const m = re.exec(s);
-      if (!m) return false;
-      if (fn(m) === false) return false;
-      s = s.slice(0, m.index) + ' ' + s.slice(m.index + m[0].length);
-      return true;
+      const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
+      let m;
+      while ((m = g.exec(s))) {
+        if (fn(m) === false) { g.lastIndex = m.index + 1; continue; }
+        s = s.slice(0, m.index) + ' ' + s.slice(m.index + m[0].length);
+        return true;
+      }
+      return false;
     };
 
     // ── #tags and !priority ──
     if (opts.tags) {
-      while (take(/\s#([\p{L}\p{N}_-]{1,24})(?=\s)/u, m => {
+      // a tag needs at least one letter, so "customer #1" keeps its number
+      while (take(/\s#((?=[\p{L}\p{N}_-]*\p{L})[\p{L}\p{N}_-]{1,24})(?=\s)/u, m => {
         if (!out.tags.some(x => x.toLowerCase() === m[1].toLowerCase())) out.tags.push(m[1]);
       })) { /* keep taking */ }
     }
@@ -88,8 +102,7 @@
     if (opts.repeats) {
       const set = (spec, label) => { out.recur = spec; out.found.push({ type: 'repeat', label: label || recurLabel(spec) }); return true; };
       const unitOf = u => u.toLowerCase().replace(/s$/, '');
-      let done =
-        take(/\s(?:repeat\s+)?(\d{1,3})\s*(days?|weeks?|months?)\s+after\s+(?:i\s+)?(?:finish(?:ing|ed)?|complet(?:e|ed|ing)|done)(?:\s+it)?(?=\s)/i,
+      take(/\s(?:repeat\s+)?(\d{1,3})\s*(days?|weeks?|months?)\s+after\s+(?:i\s+)?(?:finish(?:ing|ed)?|complet(?:e|ed|ing)|done)(?:\s+it)?(?=\s)/i,
           m => { const n = +m[1]; if (n < 1) return false; return set({ recur: 'after', recurEvery: n, recurUnit: unitOf(m[2]) }); }) ||
         take(/\s(?:monthly|every\s+month)\s+on\s+the\s+(\d{1,2})(?:st|nd|rd|th)?(?=\s)/i,
           m => { const d = +m[1]; if (d < 1 || d > 31) return false; recurDefaultDue = { monthday: d }; return set({ recur: 'monthday', recurMonthDay: d }); }) ||
@@ -112,7 +125,6 @@
         take(/\s(?:daily|every\s*day)(?=\s)/i, () => set({ recur: 'daily' })) ||
         take(/\s(?:weekly|every\s+week)(?=\s)/i, () => set({ recur: 'weekly' })) ||
         take(/\s(?:monthly|every\s+month)(?=\s)/i, () => set({ recur: 'every', recurEvery: 1, recurUnit: 'month' }));
-      void done;
     }
 
     const defaultDue = off => recurDefaultDue.days
@@ -151,8 +163,8 @@
         if (d.getMonth() !== +m[2] - 1) return false;
         return setDate(d, `${DAY_SHORT[d.getDay()]} ${d.getDate()} ${MON_SHORT[d.getMonth()]}`);
       });
-      if (!dateSet) take(/\s(?:on|by|due|until)\s+(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?(?=\s)/i, m => {      // day/month, like the app shows
-        const dd = +m[1], mm = +m[2];
+      if (!dateSet) take(/\s(?:on|by|due|until)\s+(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?(?=\s)/i, m => {      // day/month by default (opts.dmy)
+        const dd = opts.dmy === false ? +m[2] : +m[1], mm = opts.dmy === false ? +m[1] : +m[2];
         if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return false;
         let y = m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : today.getFullYear();
         let d = new Date(y, mm - 1, dd);
@@ -179,7 +191,7 @@
           const rest = s.slice(m.index + m[0].length).trim();
           const endish = rest === '' || /^(at\s+|@\s*)?\d{1,2}(:\d{2})?\s*(am|pm)?(\s|$)/i.test(rest) || /^(at\s+)?noon/i.test(rest);
           if (!full && !kw && !endish) return false;           // "sat", "sun", "wed" are also ordinary words
-          const d = nextWeekday(today, WD[name], kw === 'this');
+          const d = kw === 'next' ? weekdayOfNextWeek(today, WD[name]) : nextWeekday(today, WD[name], kw === 'this');
           return setDate(d, `${DAY_SHORT[d.getDay()]} ${d.getDate()} ${MON_SHORT[d.getMonth()]}`);
         });
       }
@@ -197,7 +209,8 @@
       });
       if (!timeSet) take(/\sat\s+(1[3-9]|2[0-3])(?=\s)/i, m => setTime(+m[1], 0));
       if (!timeSet) take(/\s(?:at\s+)?noon(?=\s)/i, () => setTime(12, 0));
-      if (tonight && !timeSet) { out.dueTime = '20:00'; timeSet = true; }
+      // "tonight" means 8 PM, unless it is already past 8 PM: then leave it as "today" with no time
+      if (tonight && !timeSet && nowHM < '20:00') { out.dueTime = '20:00'; timeSet = true; }
 
       // a repeat that names its days (or day of month) decides the first date, unless the time already passed today
       if (!dateSet && recurDefaultDue) {
@@ -230,8 +243,10 @@
 
     // ── tidy the text left behind ──
     let text = s.replace(/\s+/g, ' ').trim();
-    let prev;
-    do { prev = text; text = text.replace(/\s+(?:on|at|by|due|until|before|from|for|this|next|every|in|@|-)$/i, '').trim(); } while (text !== prev);
+    if (s !== original) {                                  // only strip dangling "on/at/for..." if we actually removed something
+      let prev;
+      do { prev = text; text = text.replace(/\s+(?:on|at|by|due|until|before|from|for|this|next|every|in|@|-)$/i, '').trim(); } while (text !== prev);
+    }
     if (!text) {                                           // nothing left: the whole input was the "date"; keep it as the task text
       return { text: String(raw).trim(), tags: [], priority: 0, due: null, dueTime: null, recur: null, found: [] };
     }

@@ -51,11 +51,21 @@ function customAccentVars(hex, dark, plain) {
     count.classList.toggle('max', n >= 120);
   }
 
+  let busy = false;
   async function submit() {
     const text = input.value.trim();
-    if (!text) return;
-    await window.api.quickAdd({ text, listId: sel.value });
-    window.api.closeQuick();
+    if (!text || busy) return;
+    busy = true;
+    try {
+      const ok = await window.api.quickAdd({ text, listId: sel.value });
+      if (ok === true) { window.api.closeQuick(); return; }
+      // The data file was busy or unreadable (e.g. mid-sync). Keep the popup open so the text isn't lost.
+      count.textContent = 'Couldn\u2019t save \u2014 try again';
+      count.classList.add('has-text', 'max');
+    } catch (e) {
+      count.textContent = 'Couldn\u2019t save \u2014 try again';
+      count.classList.add('has-text', 'max');
+    } finally { busy = false; }
   }
 
   input.addEventListener('input', updateCount);

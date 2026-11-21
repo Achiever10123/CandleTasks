@@ -167,7 +167,8 @@ function dayDiff(a, b) {
   return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
 }
 function formatDate(iso) {
-  if (!iso) return '';
+  // Output is interpolated into innerHTML elsewhere, so only ever return digits and a slash
+  if (typeof iso !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
   const [, m, d] = iso.split('-');
   return `${d}/${m}`;
 }
@@ -250,6 +251,15 @@ async function init() {
 
   $('tasks-path-label').textContent = await window.api.getDataPath();
   refreshSyncLabel();
+
+  // App updates: show the version, pick up anything found before the window was ready, listen for more
+  try {
+    const u = await window.api.getUpdateState();
+    updInfo.current = String((u && u.current) || '');
+    $('upd-status').textContent = updInfo.current ? `Version ${updInfo.current}` : '';
+    if (u && u.last) onUpdateStatus(u.last);
+  } catch (e) {}
+  window.api.onUpdateStatus(onUpdateStatus);
 
   // A notification asked to open a screen (the weekly review opens Stats)
   window.api.onOpenView(v => { if (v === 'stats') { calView = 'stats'; openStreakModal(); } });
@@ -340,12 +350,25 @@ function applyAppearance(overrides) {
 
 // ── Streak helpers ────────────────────────────────────────────────
 function normStreak(s) {
-  s.completedDates = Array.isArray(s.completedDates) ? s.completedDates : [];
-  s.frozenDates    = Array.isArray(s.frozenDates) ? s.frozenDates : [];
-  s.freezes        = Math.max(0, Math.min(3, Math.floor(s.freezes || 0)));
-  s.doneByDate     = s.doneByDate && typeof s.doneByDate === 'object' ? s.doneByDate : {};
-  s.best           = Math.max(s.best || 0, s.count || 0);
-  s.journal        = Array.isArray(s.journal) ? s.journal : [];
+  // Defence in depth: main sanitises streak data too, but several values below go into innerHTML,
+  // so make sure they are plain numbers / valid dates no matter where the object came from.
+  s = s && typeof s === 'object' ? s : {};
+  const isDate = x => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x);
+  const num = v => { v = Math.floor(Number(v)); return Number.isFinite(v) && v > 0 ? Math.min(v, 100000) : 0; };
+  s.count             = num(s.count);
+  s.lastCompletedDate = isDate(s.lastCompletedDate) ? s.lastCompletedDate : null;
+  s.completedDates    = Array.isArray(s.completedDates) ? s.completedDates.filter(isDate) : [];
+  s.frozenDates       = Array.isArray(s.frozenDates) ? s.frozenDates.filter(isDate) : [];
+  s.freezes           = Math.max(0, Math.min(3, num(s.freezes)));
+  const done = {};
+  for (const [k, v] of Object.entries(s.doneByDate && typeof s.doneByDate === 'object' ? s.doneByDate : {})) {
+    if (isDate(k) && num(v) > 0) done[k] = num(v);
+  }
+  s.doneByDate        = done;
+  s.best              = Math.max(num(s.best), s.count);
+  s.journal           = (Array.isArray(s.journal) ? s.journal : []).filter(e => e && isDate(e.date)).map(e => ({
+    date: e.date, count: num(e.count), last: isDate(e.last) ? e.last : null, freezes: Math.min(3, num(e.freezes)), best: num(e.best)
+  }));
   return s;
 }
 
@@ -574,21 +597,7 @@ function openStreakModal() {
     msgEl.textContent = 'Complete a task today to keep your streak going!';
   }
 
-  // streak freezes
-  const fz = $('modal-freeze');
-  fz.innerHTML = '';
-  for (let i = 0; i < 3; i++) {
-    const s = document.createElement('span');
-    s.className = 'fz' + (i < streak.freezes ? ' on' : '');
-    s.textContent = '❄';
-    fz.appendChild(s);
-  }
-  const t = document.createElement('span');
-  t.className = 'fz-text';
-  t.textContent = streak.freezes
-    ? `${streak.freezes} streak freeze${streak.freezes !== 1 ? 's' : ''} ready`
-    : 'Earn a freeze every 7 days';
-  fz.appendChild(t);
+  renderFreezeInfo();
 
   calOffset = 0;
   renderCalendar();
@@ -596,6 +605,34 @@ function openStreakModal() {
   $('modal-card').scrollTop = 0;
 
   if (active && streak.count > 0) setTimeout(() => igniteFlame(mwrap), 150);
+}
+
+// Streak freezes left, shown under the streak count. A freeze is earned on every 7th day of the streak (max 3).
+const MAX_FREEZES = 3;
+function freezeInfo(count, held) {
+  const n = Math.max(0, Math.min(MAX_FREEZES, Math.floor(Number(held) || 0)));
+  const c = Math.max(0, Math.floor(Number(count) || 0));
+  const main = n === 0 ? 'No streak freezes left' : `${n} of ${MAX_FREEZES} streak freezes left`;
+  const sub = n >= MAX_FREEZES ? 'Freezes are full'
+    : `Next freeze at day ${(Math.floor(c / 7) + 1) * 7}`;
+  return { n, main, sub };
+}
+function renderFreezeInfo() {
+  const box = $('modal-freeze');
+  const info = freezeInfo(streak.count, streak.freezes);
+  box.textContent = '';
+  const row = document.createElement('div');
+  row.className = 'fz-row';
+  for (let i = 0; i < MAX_FREEZES; i++) {
+    const s = document.createElement('span');
+    s.className = 'fz' + (i < info.n ? ' on' : '');
+    s.textContent = '\u2744';
+    row.appendChild(s);
+  }
+  const main = document.createElement('div'); main.className = 'fz-text'; main.textContent = info.main;
+  const sub  = document.createElement('div'); sub.className  = 'fz-sub';  sub.textContent  = info.sub;
+  box.append(row, main, sub);
+  box.title = 'A freeze covers one extra missed day so your streak survives. You earn one every 7 days, up to 3.';
 }
 
 function closeStreakModal() { $('streak-modal').classList.add('hidden'); }
@@ -732,6 +769,70 @@ function renderCalendar() {
   $('cal-caption').textContent = caption;
   $('cal-prev').disabled = prevDisabled;
   $('cal-next').disabled = calOffset >= 0;
+}
+
+// ── App updates ───────────────────────────────────────────────────
+// Everything here is rendered with textContent only; the values come from the main process.
+const updInfo = { current: '', phase: '' };
+function setUpdLabel(text) { $('upd-status').textContent = text; }
+function closeUpdModal() { $('update-modal').classList.add('hidden'); }
+function showUpdModal(title, msg, opts = {}) {
+  const { percent = null, buttons = [] } = opts;
+  $('upd-title').textContent = title;
+  $('upd-msg').textContent = msg;
+  $('upd-bar').classList.toggle('hidden', percent === null);
+  $('upd-fill').style.width = `${Math.max(0, Math.min(100, percent || 0))}%`;
+  const box = $('upd-actions');
+  box.textContent = '';
+  for (const b of buttons) {
+    const el = document.createElement('button');
+    el.className = 'upd-btn' + (b.primary ? ' primary' : '');
+    el.textContent = b.label;
+    el.addEventListener('click', b.onClick);
+    box.appendChild(el);
+  }
+  $('update-modal').classList.remove('hidden');
+}
+function onUpdateStatus(st) {
+  if (!st || typeof st !== 'object') return;
+  const v = typeof st.version === 'string' ? st.version : '';
+  const later = () => { window.api.updateLater(); closeUpdModal(); };
+  const prev = updInfo.phase;
+  updInfo.phase = st.state;
+  switch (st.state) {
+    case 'checking': setUpdLabel('Checking for updates...'); break;
+    case 'none':     setUpdLabel(`You\u2019re up to date (v${updInfo.current}).`); break;
+    case 'disabled': setUpdLabel(String(st.message || '')); break;
+    case 'available':
+      setUpdLabel(`v${v} is available.`);
+      showUpdModal('Update available', `CandleTasks v${v} is ready (you have v${updInfo.current}). Only the changed parts are downloaded where possible, and your tasks are not touched.`, {
+        buttons: [{ label: 'Download now', primary: true, onClick: () => window.api.downloadUpdate() }, { label: 'Later', onClick: later }]
+      });
+      break;
+    case 'downloading': {
+      const pct = Math.round(Number(st.percent) || 0);
+      setUpdLabel(`Downloading v${v}... ${pct}%`);
+      if (prev === 'downloading') { $('upd-msg').textContent = `${pct}%`; $('upd-fill').style.width = `${pct}%`; }   // keep the buttons, update the bar
+      else showUpdModal('Downloading update', `${pct}%`, { percent: pct, buttons: [{ label: 'Hide', onClick: closeUpdModal }] });
+      break;
+    }
+    case 'ready':
+      setUpdLabel(`v${v} is ready to install.`);
+      showUpdModal('Ready to install', 'Restart CandleTasks to finish updating. If you choose Later, it installs the next time you quit.', {
+        buttons: [{ label: 'Restart now', primary: true, onClick: () => window.api.installUpdate() }, { label: 'Later', onClick: closeUpdModal }]
+      });
+      break;
+    case 'portable':
+      setUpdLabel(`v${v} is available.`);
+      showUpdModal('New version available', `CandleTasks v${v} is out (you have v${updInfo.current}). The portable version can't update itself, so download the new portable file from the releases page.`, {
+        buttons: [{ label: 'Open download page', primary: true, onClick: () => { window.api.openReleasePage(); closeUpdModal(); } }, { label: 'Later', onClick: later }]
+      });
+      break;
+    case 'error':
+      setUpdLabel(String(st.message || 'Update problem.'));
+      if (st.showModal) showUpdModal('Update problem', String(st.message || ''), { buttons: [{ label: 'Close', onClick: closeUpdModal }] });
+      break;
+  }
 }
 
 // ── Help modal ────────────────────────────────────────────────────
@@ -1122,6 +1223,7 @@ function renderTasks() {
 const pad2 = n => String(n).padStart(2, '0');
 function nowHM() { const d = new Date(); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
 function formatTime(hm) {
+  if (typeof hm !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hm)) return '';
   const [h, m] = hm.split(':').map(Number);
   return new Date(2000, 0, 1, h, m).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
@@ -1878,6 +1980,7 @@ function loadSettingsUI() {
   $('set-ontop').checked         = settings.alwaysOnTop;
   $('set-dark').checked          = settings.darkMode;
   $('set-snap').value            = settings.snapPosition   ?? 'none';
+  $('set-auto-update').checked   = settings.autoUpdate !== false;
   $('set-minimize-tray').checked = settings.minimizeToTray ?? false;
   $('set-reminder').checked      = settings.reminderEnabled;
   $('set-notify-overdue').checked = settings.notifyOverdue !== false;
@@ -1907,6 +2010,7 @@ async function saveSettings() {
   settings.reminderEnabled = $('set-reminder').checked;
   settings.notifyOverdue   = $('set-notify-overdue').checked;
   settings.launchAtLogin   = $('set-launch-login').checked;
+  settings.autoUpdate      = $('set-auto-update').checked;
   settings.weeklyReview    = $('set-weekly-review').checked;
   settings.reviewTime      = $('set-review-time').value || '18:00';
   settings.reminderTime    = $('set-reminder-time').value;
@@ -2152,6 +2256,9 @@ $('sound-btn').addEventListener('click', toggleSound);
 $('help-btn').addEventListener('click', openHelp);
 $('help-close').addEventListener('click', closeHelp);
 $('help-modal').addEventListener('click', e => { if (e.target === $('help-modal')) closeHelp(); });
+$('upd-check').addEventListener('click', () => window.api.checkForUpdate());
+$('upd-close').addEventListener('click', closeUpdModal);
+$('update-modal').addEventListener('click', e => { if (e.target === $('update-modal')) closeUpdModal(); });
 $('set-reminder').addEventListener('change', toggleReminderTimeRow);
 $('set-weekly-review').addEventListener('change', toggleReviewTimeRow);
 ['set-dark', 'set-theme-color', 'set-ui-style', 'set-compact'].forEach(id => $(id).addEventListener('change', previewAppearance));
@@ -2208,6 +2315,7 @@ document.addEventListener('keydown', e => {
     undo();
   } else if (e.key === 'Escape') {
     if (!$('tag-pop').classList.contains('hidden')) closeTagPop();
+    else if (!$('update-modal').classList.contains('hidden')) closeUpdModal();
     else if (!$('help-modal').classList.contains('hidden')) closeHelp();
     else if (!$('streak-modal').classList.contains('hidden')) closeStreakModal();
     else if (document.activeElement === $('search-input') || searchQuery) $('search-clear').click();
@@ -2220,7 +2328,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (isTypingTarget(e.target)) return;
-  if (settingsOpen() || !$('streak-modal').classList.contains('hidden') || !$('help-modal').classList.contains('hidden')) return;
+  if (settingsOpen() || !$('streak-modal').classList.contains('hidden') || !$('help-modal').classList.contains('hidden') || !$('update-modal').classList.contains('hidden')) return;
   const key = e.key;
   if (!['ArrowDown', 'ArrowUp', ' ', 'Delete', 'Enter'].includes(key)) return;
   const ids = visibleTasks().map(t => t.id);

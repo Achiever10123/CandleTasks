@@ -1086,12 +1086,21 @@ body .task-item.selected { background:var(--accent-bg) !important; box-shadow:0 
 .list-tab.drop-target .list-name { color:#fff; }
 
 /* ── Streak freeze + frozen calendar days ── */
-.modal-freeze { display:flex; align-items:center; justify-content:center; gap:4px; margin-top:6px; font-size:12px; }
-.modal-freeze .fz { color:#5CE1E6; opacity:.25; font-size:14px; }
-.modal-freeze .fz.on { opacity:1; }
-.modal-freeze .fz-text { margin-left:4px; font-size:11px; color:#8aa; }
+.modal-freeze {
+  display:flex; flex-direction:column; align-items:center; gap:3px; align-self:stretch;
+  margin:6px 0 2px; padding:8px 6px 9px;
+  background:rgba(92,225,230,.10); border:1px solid rgba(92,225,230,.35); border-radius:var(--radius-sm, 10px);
+}
+.modal-freeze .fz-row { display:flex; gap:7px; }
+.modal-freeze .fz { color:#5CE1E6; opacity:.22; font-size:20px; line-height:1; }
+.modal-freeze .fz.on { opacity:1; text-shadow:0 0 8px rgba(92,225,230,.75); }
+.modal-freeze .fz-text { font-size:12px; font-weight:700; text-align:center; }
+.modal-freeze .fz-sub { font-size:10.5px; opacity:.75; text-align:center; }
+body.light .modal-freeze { background:rgba(10,143,152,.08); border-color:rgba(10,143,152,.35); }
 body.light .modal-freeze .fz { color:#0a8f98; }
-body.light .modal-freeze .fz-text { color:#4a6a70; }
+body.light .modal-freeze .fz.on { text-shadow:none; }
+body.ui-brutalism .modal-freeze { border-width:2px; border-radius:0; }
+body.ui-bento .modal-freeze { border-radius:12px; }
 .cal-grid .week-day-box.frozen {
   background:rgba(92,225,230,.18); border:1px dashed #5CE1E6; color:#5CE1E6; font-size:12px;
 }
@@ -1298,3 +1307,21 @@ body.ui-glass .recur-extra input, body.ui-glass .recur-extra select, body.ui-gla
 }
 body.compact .view-chip { padding:2px 4px; font-size:10px; }
 body.compact .parse-hint { font-size:10px; }
+
+
+/* ── App update dialog (reuses .modal-card / .help-card, so every UI style and theme applies) ── */
+.upd-msg { font-size:12px; line-height:1.5; margin:8px 0 2px; }
+.upd-bar { height:8px; background:var(--bg-3); border:1px solid var(--border); border-radius:99px; overflow:hidden; margin:10px 0 2px; }
+.upd-bar.hidden { display:none; }
+.upd-fill { height:100%; width:0; background:var(--accent); transition:width .2s; }
+.upd-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
+.upd-btn {
+  background:none; border:1px solid var(--accent-border); color:var(--accent); cursor:pointer;
+  font-size:12px; padding:6px 12px; border-radius:var(--radius-sm); transition:background .15s;
+}
+.upd-btn:hover { background:var(--accent-bg); }
+.upd-btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; box-shadow:0 2px 6px var(--accent-glow); }
+.upd-btn.primary:hover { background:var(--accent-2); }
+body.ui-glass .upd-bar { background:rgba(255,255,255,.08); }
+body.ui-brutalism .upd-bar, body.ui-brutalism .upd-btn { border-width:2px; border-radius:0; box-shadow:none; }
+body.ui-bento .upd-btn { border-radius:9px; }
