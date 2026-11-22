@@ -16,7 +16,7 @@ function load({ portable = false, online = true, packaged = true, fetchImpl } = 
     Notification: Object.assign(function () { this.on = () => {}; this.show = () => {}; }, { isSupported: () => false }),
     shell: { openExternal: url => calls.opened.push(url) }
   };
-  const pkg = { build: { publish: [{ provider: 'github', owner: 'jane', repo: 'candletasks' }] } };
+  const pkg = { build: { publish: [{ provider: 'github', owner: 'Achiever10123', repo: 'CandleTasks' }] } };
   // The hook stays installed for this file: updater.js loads electron-updater and package.json lazily.
   // (node --test runs every test file in its own process, so this does not leak into other tests.)
   const orig = Module._load.__orig || Module._load;
@@ -118,7 +118,7 @@ test('portable build: tells the user about a newer release and opens only the fi
   await handlers['update-check'](); await tick(); await tick();
   assert.deepEqual(sent.at(-1), { state: 'portable', version: '1.3.0', current: '1.1.0' });
   await handlers['update-open-page']();
-  assert.deepEqual(calls.opened, ['https://github.com/jane/candletasks/releases/latest']);
+  assert.deepEqual(calls.opened, ['https://github.com/Achiever10123/CandleTasks/releases/latest']);
   assert.equal(calls.check, 0);                                   // electron-updater is not used for portable
   delete process.env.PORTABLE_EXECUTABLE_FILE;
 });
