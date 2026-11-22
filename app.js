@@ -26,6 +26,8 @@ const expanded  = new Set();      // task ids whose detail panel is open
 let renamingListId = null;
 let pendingFocus   = null;        // { id, sel } re-focus after a re-render
 let pendingExternal = null;       // sync update held back while the user is typing
+let pendingExternalSeq = 0;       // mutationSeq when that update arrived
+let mutationSeq = 0;              // counts local changes
 let dragId = null;
 let lastOverdue = -1;
 const undoStack = [];
@@ -246,7 +248,9 @@ function addTagTo(task, raw) {
 async function init() {
   settings = await window.api.getSettings();
   streak   = normStreak(await window.api.getStreak());
-  applyLoadedData(await window.api.getData());
+  const first = await window.api.getData();
+  applyLoadedData(first);
+  if (first.unreadable) setTimeout(watchUnreadable, 600);
   migrateStreak();
 
   if (settings.uiStyle === 'minimal') settings.uiStyle = 'glass';   // legacy value
@@ -282,7 +286,7 @@ async function init() {
 
   // Another device (or the quick-add popup) changed tasks.json
   window.api.onDataChanged(d => {
-    if (isEditingActive()) { pendingExternal = d; return; }
+    if (isEditingActive()) { pendingExternal = d; pendingExternalSeq = mutationSeq; return; }
     applyLoadedData(d);
     renderAll();
     checkOverdueNotifications();
@@ -296,8 +300,32 @@ function applyLoadedData(d) {
   activeListId = activeListId && lists.some(l => l.id === activeListId) ? activeListId : d.activeListId;
 }
 
+let lastSaveWarn = 0;
 function persist() {
-  window.api.saveData({ version: 2, lists, activeListId, tasks, tagColors });
+  const warn = () => {
+    if (Date.now() - lastSaveWarn < 15000) return;
+    lastSaveWarn = Date.now();
+    showToast('Could not save your tasks. Check that the tasks file is reachable (sync folder, disk space).', null, null, 7000);
+  };
+  window.api.saveData({ version: 2, lists, activeListId, tasks, tagColors }).then(ok => { if (ok === false) warn(); }).catch(warn);
+}
+
+// tasks.json existed but could not be read at startup (e.g. a sync client was mid-write). Main refuses to
+// save over it; keep trying to read it so nothing is lost and the real tasks show up when it is readable.
+let unreadableTimer = null;
+function watchUnreadable() {
+  clearInterval(unreadableTimer);
+  showToast('Your tasks file is busy or unreadable. Changes are not saved until it can be read.', null, null, 8000);
+  unreadableTimer = setInterval(async () => {
+    try {
+      const d = await window.api.getData();
+      if (d.unreadable) return;
+      clearInterval(unreadableTimer);
+      applyLoadedData(d);
+      renderAll();
+      showToast('Tasks file read. Your tasks are back.');
+    } catch (e) {}
+  }, 4000);
 }
 
 function isEditingActive() {
@@ -307,8 +335,19 @@ function isEditingActive() {
 }
 function flushExternal() {
   if (pendingExternal && !isEditingActive()) {
-    applyLoadedData(pendingExternal);
+    const ext = pendingExternal;
     pendingExternal = null;
+    if (mutationSeq !== pendingExternalSeq) {
+      // The user changed something while the update was waiting: keep their version and only add what
+      // is new in the update (tasks / lists we do not have yet), then save, so neither side is lost.
+      const haveT = new Set(tasks.map(t => t.id)), haveL = new Set(lists.map(l => l.id));
+      ext.lists.forEach(l => { if (!haveL.has(l.id)) lists.push(l); });
+      ext.tasks.forEach(t => { if (!haveT.has(t.id)) tasks.push(t); });
+      tagColors = { ...(ext.tagColors || {}), ...tagColors };
+      persist();
+    } else {
+      applyLoadedData(ext);
+    }
     renderAll();
   }
 }
@@ -901,6 +940,7 @@ const ICON_EDIT    = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none
 // ── Undo ──────────────────────────────────────────────────────────
 // Every mutation goes through mutate(): snapshot → change → save → render.
 function mutate(label, fn, toastMsg) {
+  mutationSeq++;
   undoStack.push({ label, snap: JSON.stringify({ lists, activeListId, tasks, tagColors }) });
   if (undoStack.length > 40) undoStack.shift();
   fn();
@@ -2077,7 +2117,9 @@ function refreshSyncLabel() {
 }
 
 async function applySync(folder) {
-  const res = await window.api.setSyncFolder(folder);
+  let res;
+  try { res = await window.api.setSyncFolder(folder); }
+  catch (e) { showToast('Could not switch the sync folder. Your tasks were left where they were.', null, null, 7000); return; }
   settings.syncFolder = res.syncFolder;
   applyLoadedData(res.data);
   adoptStreak(res.streak);
@@ -2354,6 +2396,7 @@ document.addEventListener('keydown', e => {
   if (settingsOpen() || !$('streak-modal').classList.contains('hidden') || !$('help-modal').classList.contains('hidden') || !$('update-modal').classList.contains('hidden')) return;
   const key = e.key;
   if (!['ArrowDown', 'ArrowUp', ' ', 'Delete', 'Enter'].includes(key)) return;
+  if ((key === ' ' || key === 'Enter') && e.target && e.target.tagName === 'BUTTON' && !e.target.closest('#task-list, .list-tabs, .footer-bar')) return;
   const ids = visibleTasks().map(t => t.id);
   if (!ids.length) return;
 

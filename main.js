@@ -18,7 +18,8 @@ let inMini = false;
 let overdueCount = 0;
 
 // Only one copy may run: two copies would fight over the data files, watcher and global shortcut.
-if (!app.requestSingleInstanceLock()) {
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
@@ -254,6 +255,7 @@ const dataPath   = () => path.join(dataDir(), 'tasks.json');
 const mirrorPath = () => path.join(dataDir(), 'tasks.md');
 
 let lastWrittenHash = '';
+let dataLoadFailed = false;   // tasks.json exists but could not be read: refuse renderer saves until it can
 
 function defaultData() {
   const id = uid();
@@ -399,6 +401,7 @@ function loadData(opts = {}) {
         raw = fs.readFileSync(p, 'utf8');
         const parsed = JSON.parse(raw);
         lastWrittenHash = hash(raw);
+        dataLoadFailed = false;
         return normalizeData(parsed);
       } catch (e) { lastErr = e; sleepSync(250); }
     }
@@ -408,6 +411,7 @@ function loadData(opts = {}) {
       if (!fs.existsSync(keep)) fs.copyFileSync(p, keep);
     } catch (_) {}
     if (opts.strict) throw lastErr || new Error('tasks.json unreadable');
+    dataLoadFailed = true;
     return defaultData();
   }
 
@@ -488,6 +492,7 @@ function onExternalChange() {
     if (h === lastWrittenHash) return;          // our own write
     const data = normalizeData(JSON.parse(raw)); // throws if mid-sync/partial
     lastWrittenHash = h;
+    dataLoadFailed = false;
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('data-changed', data);
   } catch (e) {}
 }
@@ -773,7 +778,7 @@ function stampNow() {
 function buildBackup() {
   return {
     app: 'CandleTasks', backupVersion: 1, createdAt: new Date().toISOString(),
-    data: loadData(), streak: loadStreak(), settings: portableSettings(loadSettings())
+    data: loadData({ strict: true }), streak: loadStreak(), settings: portableSettings(loadSettings())
   };
 }
 function cleanStreak(s) {
@@ -804,8 +809,11 @@ function cleanStreak(s) {
 const updater = require('./updater');
 updater.registerIpc(handle);
 
-handle('get-data', () => loadData());
-handle('save-data', (_, data) => { saveData(data); return true; });
+handle('get-data', () => { const d = loadData(); return { ...d, unreadable: dataLoadFailed }; });
+handle('save-data', (_, data) => {
+  if (dataLoadFailed) return false;          // the file on disk is the real data: never replace it with an empty list
+  try { saveData(data); return true; } catch (e) { return false; }
+});
 handle('get-data-path', () => dataPath());
 
 let approvedSyncFolder = null;
@@ -830,16 +838,18 @@ handle('set-sync-folder', (_, folder) => {
   const current = loadData({ strict: true }); // read from the OLD location first; refuse if unreadable
   const currentStreak = loadStreak();
   const settings = loadSettings();
+  const prevFolder = settings.syncFolder || '';
   settings.syncFolder = folder || '';
   saveSettings(settings);
   stopWatching();
 
   let data;
+  try {
   if (!folder) {
     data = current;                           // back to local: keep the working copy
     saveData(data);
   } else if (fs.existsSync(dataPath())) {
-    data = mergeData(loadData(), current);    // folder already has data: merge, nothing lost
+    data = mergeData(loadData({ strict: true }), current);    // folder already has data: merge, nothing lost
     saveData(data);
   } else {
     data = current;
@@ -852,6 +862,13 @@ handle('set-sync-folder', (_, folder) => {
 
   startWatching();
   return { data, syncFolder: settings.syncFolder, streak };
+  } catch (e) {
+    // the new folder could not be read: go back to where the data was, change nothing
+    settings.syncFolder = prevFolder;
+    saveSettings(settings);
+    startWatching();
+    throw e;
+  }
 });
 
 handle('get-settings', () => loadSettings());
@@ -1028,6 +1045,7 @@ app.on('before-quit', () => { isQuitting = true; saveBounds(); stopWatching(); }
 app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (e) {} });
 
 app.whenReady().then(() => {
+  if (!gotLock) return;                      // a second copy must not touch the data files or the shortcut
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
   loadData();            // runs the v1 → v2 migration early if needed
   createWindow();

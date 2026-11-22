@@ -844,7 +844,7 @@ body.light .d-grid .d-due { color-scheme:light; }
 .modal-tabs { display:flex; gap:2px; padding:2px; border-radius:999px; background:rgba(128,128,128,.18); margin:8px 0 2px; }
 .modal-tabs button {
   border:none; background:none; color:#9a9086; font:inherit; font-size:11px; font-weight:700;
-  padding:4px 14px; border-radius:999px; cursor:pointer; transition:background .15s, color .15s;
+  padding:4px 10px; min-width:0; border-radius:999px; cursor:pointer; transition:background .15s, color .15s;
 }
 .modal-tabs button.active { background:var(--accent); color:#fff; }
 .cal-nav { display:flex; align-items:center; justify-content:space-between; width:100%; margin-top:6px; }
@@ -857,7 +857,7 @@ body.light .cal-nav span { color:#4a3010; }
 body.light .cal-nav button { color:#4a3010; }
 .cal-nav button:hover:not(:disabled) { background:rgba(128,128,128,.32); }
 .cal-nav button:disabled { opacity:.3; cursor:default; }
-.cal-grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:5px; width:100%; margin:6px 0 2px; }
+.cal-grid { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:5px; width:100%; margin:6px 0 2px; }
 .cal-dow { font-size:9px; font-weight:700; color:#888; text-transform:uppercase; text-align:center; letter-spacing:.03em; }
 body.light .cal-dow { color:#8a7355; }
 .cal-grid .week-day-box {
@@ -988,7 +988,7 @@ body.light .help-title { color:#1a1208; }
 }
 .help-keys { display:flex; flex-direction:column; gap:5px; margin:0; }
 .help-keys > div { display:flex; align-items:center; gap:10px; font-size:12px; }
-.help-keys dt { display:flex; gap:3px; flex:0 0 84px; margin:0; }
+.help-keys dt { display:flex; gap:3px; flex:0 0 96px; margin:0; }
 .help-keys dd { margin:0; }
 .help-card kbd {
   font:inherit; font-size:10px; font-weight:700; line-height:1; padding:3px 6px; min-width:20px; text-align:center;
@@ -1378,3 +1378,11 @@ body.ui-bento .modal-card::-webkit-scrollbar-thumb { border-radius:10px; }
 body.ui-glass .modal-card::-webkit-scrollbar-thumb { background:rgba(255,255,255,.28); background-clip:padding-box; }
 body.ui-glass.light .modal-card::-webkit-scrollbar-thumb { background:rgba(60,50,120,.28); background-clip:padding-box; }
 body.ui-glass .modal-card::-webkit-scrollbar-thumb:hover { background:var(--accent); background-clip:padding-box; }
+
+
+/* ── Modal overflow fix ─────────────────────────────────────────
+   The calendar day boxes are width:100% with a 1px border; without border-box every cell stuck out
+   by 2px, which (plus the card's end padding) made the modal grow a horizontal scrollbar. */
+.cal-grid, .cal-grid *, .cal-nav, .cal-nav *, .stats-view, .stats-view *, .modal-freeze, .modal-freeze *, .modal-tabs, .modal-tabs * { box-sizing:border-box; }
+.modal-card { overflow-x:hidden; }
+.modal-tabs { max-width:100%; }
