@@ -193,7 +193,7 @@ function registerIpc(handle) {
 
 function start(d) {
   deps = d;
-  try { repo = parseRepo(require('./package.json')); } catch (e) { repo = null; }
+  repo = { owner: 'Achiever10123', repo: 'CandleTasks' };
   if (mode() === 'disabled' || mode() === 'dev') return;
   setTimeout(() => check(false), CHECK_DELAY_MS).unref();
   timer = setInterval(() => check(false), CHECK_EVERY_MS);
